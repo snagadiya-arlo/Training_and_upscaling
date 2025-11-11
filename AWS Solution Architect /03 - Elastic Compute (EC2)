@@ -1,0 +1,303 @@
+#############################################
+#                Amazon EC2                 #
+#############################################
+
+Amazon EC2:
+------------
+• EC2 is one of the most widely used AWS services.
+• EC2 stands for Elastic Compute Cloud — AWS’s Infrastructure as a Service (IaaS).
+• It allows renting virtual machines (servers) on demand.
+• You can store data using EBS (Elastic Block Storage).
+• Load can be distributed using ELB (Elastic Load Balancer).
+• EC2 supports auto-scaling using ASG (Auto Scaling Group).
+• Understanding EC2 is key to understanding cloud computing.
+
+EC2 Sizing & Configuration:
+---------------------------
+• Choose the operating system (Linux / Windows / macOS).
+• Select how much compute power (CPU cores).
+• Decide how much memory (RAM).
+• Choose storage type: EBS / EFS (network) or Instance Store (local storage).
+• Pick network options: card speed and public IP.
+• Apply firewall rules using Security Groups.
+• Add startup automation using EC2 User Data script.
+
+EC2 User Data:
+--------------
+• User Data allows automated setup when the instance starts.
+• Bootstrapping = running commands automatically at first boot.
+• User Data runs only once — during the first launch.
+• Used to install updates, software, download files, etc.
+• Runs with root privileges, so it can configure the system fully.
+
+EC2 Instance Types – Overview:
+------------------------------
+• AWS provides different instance types optimized for different use cases.
+• EC2 naming format example: m5.2xlarge
+   → m = instance family (e.g., general purpose, compute, memory)
+   → 5 = generation (AWS improves hardware with each generation)
+   → 2xlarge = size within the instance family
+
+General Purpose Instances:
+--------------------------
+• Used for general workloads like web servers or code repositories.
+• Balanced performance between compute, memory, and networking.
+• Example: t2.micro is a general-purpose instance used commonly in learning.
+
+Compute Optimized Instances:
+----------------------------
+• Best for compute-intensive applications requiring high CPU performance.
+• Used for workloads like batch processing, media encoding, ML, and gaming servers.
+
+Memory Optimized Instances:
+---------------------------
+• Designed for workloads that need fast memory access and large RAM.
+• Used for databases, real-time analytics, caching systems, and BI workloads.
+
+Storage Optimized Instances:
+----------------------------
+• Ideal for high-speed storage requirements and large datasets.
+• Used for OLTP systems, NoSQL databases, data warehouses, and distributed storage.
+
+Accelerated Computing / GPU Instances:
+--------------------------------------
+• Designed for GPU-based workloads like ML training, video rendering, and HPC.
+
+High Memory Instances:
+----------------------
+• Provide extremely large RAM, mainly used for running in-memory databases like SAP HANA.
+
+HPC (High Performance Computing) / High Network Throughput Instances:
+---------------------------------------------------------------------
+• Built for tightly coupled compute workloads like scientific simulations and large-scale modeling.
+
+Dense Storage / HDD-based Instances:
+------------------------------------
+• Optimized for workloads needing high sequential read/write throughput like Hadoop and distributed file systems.
+
+Micro / Burstable Instances (T family):
+---------------------------------------
+• Instances that provide burstable CPU performance with a lower baseline for cost-effective workloads.
+
+Instance Type Examples:
+-----------------------
+• Instances vary in vCPU, memory, storage type, and network bandwidth.
+• Example: t2.micro is small and low-cost, while higher classes like r5.16xlarge are powerful for enterprise workloads.
+
+
+Introduction to Security Groups:
+--------------------------------
+Security Groups act as virtual firewalls that control which inbound and outbound traffic is allowed to reach your EC2 instance.
+
+Diagram Short Summary:
+----------------------
+The diagram shows traffic flowing through a Security Group before reaching the EC2 instance, allowing only approved inbound and outbound traffic.
+
+Security Groups – Deeper Dive:
+------------------------------
+• Regulate which ports, IP ranges, and traffic direction (inbound/outbound) are allowed.
+• Security Groups allow only authorized traffic (e.g., your IP on port 22) and block all unauthorized traffic.
+
+Diagram Short Summary:
+----------------------
+Shows how inbound/outbound traffic is filtered — your IP is allowed on port 22 while others are denied.
+
+Security Groups – Good to Know:
+-------------------------------
+• By default, all inbound traffic is denied until explicitly allowed.
+• Outbound traffic is allowed by default unless restricted.
+• Security Groups are stateful — return traffic is automatically allowed.
+• Multiple Security Groups can be attached to a single EC2 instance.
+• A single Security Group can be attached to multiple instances.
+• Security Groups are created at the VPC level and are regional.
+
+Referencing Other Security Groups:
+----------------------------------
+• Security Groups can reference other Security Groups instead of IPs.
+• Allows secure communication between instances.
+
+Diagram Short Summary:
+----------------------
+Shows multiple EC2 instances using different Security Groups, where SG1 permits inbound traffic from SG1 and SG2 but denies others.
+
+Classic Ports to Know:
+----------------------
+22 (SSH), 21/20 (FTP), 80 (HTTP), 443 (HTTPS), 3389 (RDP), 53 (DNS), 25 & 587 (SMTP),
+110 (POP3), 143 (IMAP), 3306 (MySQL), 5432 (PostgreSQL), 27017 (MongoDB),
+1521 (Oracle DB), 6379 (Redis), 8080 (Alt HTTP / app servers), 9090 (Prometheus),
+6443 (Kubernetes API server).
+
+SSH Summary Table:
+------------------
+• Mac & Linux: SSH and EC2 Instance Connect supported natively.
+• Windows (older than 10): Use PuTTY.
+• Windows 10 and above: Support SSH, PuTTY, and EC2 Instance Connect.
+
+SSH Troubleshooting:
+--------------------
+There's a connection timeout:
+→ Security Group issue. Any timeout is related to SGs or a firewall. Ensure proper SG configuration.
+
+Still a connection timeout:
+→ Likely a corporate/personal firewall. Try EC2 Instance Connect.
+
+SSH does not work on Windows:
+→ “ssh command not found” → Use PuTTY or EC2 Instance Connect.
+
+Connection refused:
+→ Instance reachable but no SSH service. Restart or recreate instance (use Amazon Linux 2).
+
+Permission denied (publickey):
+→ Wrong key or user.
+→ Ensure correct key and user (ec2-user@<public-ip>).
+
+Cannot connect after restart:
+→ Public IP changed. Update IP in your SSH/Putty configuration.
+
+Nothing is working - “aaaahhhhhh”:
+→ Don’t panic. Use EC2 Instance Connect.
+
+
+EC2 Instance Purchasing Options:
+--------------------------------
+• On-Demand Instances – Pay by second/hour, no commitment, high flexibility, high cost.
+• Reserved Instances (1 & 3 years) – Commit long-term, big discounts.
+   → Standard RIs – Fixed configuration, predictable workloads.
+   → Convertible RIs – Change instance type/family/OS.
+• Savings Plans – Commit fixed spend per hour; flexible usage.
+• Spot Instances – Lowest cost; AWS can reclaim anytime.
+• Dedicated Hosts – Entire physical server for your account.
+• Dedicated Instances – Hardware not shared with other customers.
+• Capacity Reservations – Reserve capacity in specific AZ (no discount).
+
+1. EC2 On-Demand:
+-----------------
+• Pay-as-you-go – per second/hour.
+• Highest cost, zero upfront.
+• No commitment – start/stop anytime.
+• Best for unpredictable workloads.
+
+2. Reserved Instances:
+----------------------
+• Up to 72% cheaper than On-Demand.
+• Fixed attributes: type, region, tenancy, OS.
+• Commit for 1 or 3 years.
+• Payment: no upfront / partial / all upfront.
+• Regional or Zonal scope (Zonal guarantees capacity).
+• Best for steady workloads (e.g., databases).
+• Convertible RIs – allows flexibility.
+
+3. EC2 Savings Plans:
+---------------------
+• Discounts up to ~72%.
+• Commit to spend/hour (e.g., $10/hr for 1–3 years).
+• Extra usage billed On-Demand.
+• Locked to instance family & region.
+• Flexible across size, OS, and tenancy.
+
+4. EC2 Spot Instances:
+----------------------
+• Up to 90% cheaper than On-Demand.
+• Interrupted anytime if price exceeds max bid.
+• Ideal for interruption-tolerant workloads (batch, analytics, distributed tasks).
+• Not suitable for critical workloads or databases.
+
+5. EC2 Dedicated Hosts:
+-----------------------
+• Physical server fully dedicated to your account.
+• Meets compliance and licensing needs.
+• On-Demand or Reserved purchase (1/3 years).
+• Most expensive EC2 option.
+
+6. EC2 Dedicated Instances:
+---------------------------
+• Hardware dedicated only to your account.
+• No control over physical placement.
+
+7. EC2 Capacity Reservations:
+-----------------------------
+• Reserve On-Demand capacity in a specific AZ.
+• Guaranteed compute availability.
+• No discount; can combine with RIs and Savings Plans.
+• Best for short-term critical workloads in fixed AZs.
+
+Purchasing Option Comparison (Hotel Analogy):
+---------------------------------------------
+• On-Demand → Pay full price; stay anytime.
+• Reserved Instances → Book early; commit for discount.
+• Savings Plans → Pay hourly commitment; any room type.
+• Spot Instances → Bid for empty rooms; may be evicted anytime.
+• Dedicated Hosts → Book entire building.
+• Capacity Reservations → Reserve room, pay even if unused.
+
+
+EC2 Spot Instance Requests:
+---------------------------
+• Run EC2 instances at up to 90% discount.
+• Define:
+   → Max spot price
+   → Instance count
+   → Configuration (AMI, type, AZ)
+• AWS gives instance only if current spot price < max bid.
+• If spot price rises above bid → AWS gives 2-min warning, then:
+   → Stop instance (if persistent) or
+   → Terminate instance
+
+Spot Block:
+-----------
+• Reserve Spot Instance for 1–6 hours (less interruption risk).
+
+Best Use Cases:
+---------------
+• Batch processing
+• Big data / analytics
+• Image rendering
+• CI/CD workloads
+
+Not Recommended For:
+--------------------
+• Critical workloads
+• Databases
+• Guaranteed uptime workloads
+
+
+Spot Instance Lifecycle (Request States):
+-----------------------------------------
+open       → Request sent but no instance yet
+active     → Request fulfilled, instance running
+failed     → AWS unable to fulfill request
+cancelled  → User cancelled
+closed     → One-time request completed
+disabled   → Persistent request disabled due to limit/pricing
+
+Key Reminders:
+--------------
+• You can cancel only open, active, or disabled requests.
+• Cancelling a Spot Request does NOT terminate the instance.
+• To delete a Spot instance:
+   1. Cancel the Spot Request
+   2. Terminate the instance
+
+
+Spot Fleets:
+------------
+• Spot Fleet = multiple Spot (and optional On-Demand) instances managed as a group.
+
+How Spot Fleet Works:
+---------------------
+• Define target capacity (e.g., 10 instances).
+• Define multiple launch pools (instance types, AZs, OS).
+• Fleet automatically finds cheapest available capacity.
+
+Allocation Strategies:
+----------------------
+lowestPrice             → Pick cheapest pool (short workloads)
+diversified             → Spread across pools (availability)
+capacityOptimized       → Pools with most capacity (fewer interruptions)
+priceCapacityOptimized  → Balanced price & capacity (recommended)
+
+Benefits:
+---------
+• Automatically finds lowest-priced instances.
+• Reduces cost while maintaining availability.
+• Ideal for large-scale dynamic workloads.
