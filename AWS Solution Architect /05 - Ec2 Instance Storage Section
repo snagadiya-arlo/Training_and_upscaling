@@ -1,0 +1,360 @@
+# 🧠 EC2 Instance Storage Section
+
+---
+
+## 📦 What’s an EBS Volume?
+
+- **EBS (Elastic Block Store)** is a **network-based block storage** that attaches to EC2 instances.
+- Data stored on EBS **persists even when the EC2 instance stops**.
+- An **EBS volume** can be attached to **only one EC2 instance** at a time.
+- Each EBS volume is **restricted to a specific Availability Zone (AZ)**.
+- Think of EBS as a **"network USB stick"** — not physically inside the EC2 instance.
+
+### 🔹 EBS Volume Details:
+- EBS is **network-attached**, so a small latency may exist.
+- You can **detach** an EBS volume from one EC2 and **attach** it to another (in the same AZ).
+- **Cannot attach across AZs** directly — you must **take a snapshot** and restore in another AZ.
+- Storage capacity & IOPS are **provisioned at creation time**.
+- Billing is based on **provisioned capacity**, not actual data usage.
+- **Volume size can be increased anytime** without downtime.
+
+### 🧭 Diagram:
++----------------------+ +----------------------+
+| EC2 Instance (AZ-a)| <---> | EBS Volume (AZ-a) |
++----------------------+ +----------------------+
+
++----------------------+ +----------------------+
+| EC2 Instance (AZ-b)| <---> | EBS Volume (AZ-b) |
++----------------------+ +----------------------+
+
+❗ EBS Volumes can attach only within the same Availability Zone.
+
+
+---
+
+## 🧹 EBS – Delete on Termination Attribute
+
+- Controls whether an **EBS volume is deleted automatically** when its EC2 instance terminates.
+- By default:
+  - **Root EBS volume** → Deleted automatically.
+  - **Additional attached EBS volumes** → Retained by default.
+- Can be **enabled/disabled** via AWS Console or CLI.
+- Disable this if you want to **retain root volume** even after termination.
+
+---
+
+## 🧩 EBS Snapshots
+
+- A **snapshot** is a **point-in-time backup** of an EBS volume.
+- You can take a snapshot **without detaching** the volume (though detaching ensures data consistency).
+- Snapshots are stored in **S3-based snapshot storage**.
+- Can be **copied to other AZs or AWS Regions** for redundancy or migration.
+
+### 🧭 Diagram:
+[EC2 Instance in us-east-1a]
+|
+| (attached to)
+v
++------------------+
+| EBS Volume 50GB |
++------------------+
+|
+| (Create Snapshot)
+v
++-------------------+
+| EBS Snapshot (S3)|
++-------------------+
+|
+| (Restore in new AZ)
+v
+[EC2 Instance in us-east-1b] <---> [New EBS Volume 50GB]
+
+Demonstrates cross-AZ backup and restoration.
+
+
+---
+
+## 💾 EBS Snapshot Features
+
+### 🧊 EBS Snapshot Archive
+- Move snapshots to an **archive tier** (up to **75% cheaper**).
+- Restoring archived snapshots takes **24–72 hours**.
+
+### 🔁 Recycle Bin for EBS Snapshots
+- Allows **retaining deleted snapshots** temporarily for recovery.
+- Define retention period from **1 day to 1 year**.
+
+### ⚡ Fast Snapshot Restore (FSR)
+- **Pre-initializes** snapshots to eliminate first-time access latency.
+- Offers **instant readiness** (at extra cost).
+
+### 🧭 Diagram:
+[Active Snapshot] --> [Archive Tier ❄️]
+(Cheaper, slower restore)
+
+[Deleted Snapshot] --> [Recycle Bin ♻️]
+(Can be recovered)
+
+
+
+---
+
+## 🧱 Amazon Machine Image (AMI)
+
+- **AMI** = Amazon Machine Image → Preconfigured EC2 template with **OS, software, and settings**.
+- Created per **Region**.
+- Used to **launch new EC2 instances quickly**.
+
+### AMI Sources:
+- **Public AMIs** (AWS-provided)
+- **Custom AMIs** (user-created)
+- **Marketplace AMIs** (third-party)
+
+### 🔹 AMI Creation Process:
+1. Launch & configure an EC2 instance.
+2. Stop it for consistency.
+3. Create AMI → Automatically takes EBS snapshots.
+4. Use AMI to launch identical EC2 instances.
+
+### 🧭 Diagram:
+[EC2 Instance in us-east-1a]
+|
+| (Create Custom AMI)
+v
++----------------+
+| Custom AMI |
+| (with snapshots)|
++----------------+
+|
+| (Launch new instance)
+v
+[EC2 Instance in us-east-1b]
+
+
+---
+
+## ⚙️ EC2 Instance Store (Ephemeral Storage)
+
+- **Instance Store** = Storage physically **attached to the EC2 host hardware**.
+- Offers **very high IOPS** and **low latency**.
+- Data is **lost** if instance stops, terminates, or host fails.
+- Best for **temporary / fast-changing data** (cache, buffers, temp files).
+
+### ⚡ Characteristics:
+- **Extremely high performance** (up to millions of IOPS).
+- **Ephemeral** → No durability, no snapshots.
+- Must handle **backups manually**.
+
+### 🧭 Diagram:
+[EC2 Host Machine]
+├── EC2 Instance
+│ └── Instance Store (Local NVMe Disk)
+└── EBS Volume (Network-attached)
+
+Instance Store = Highest IOPS but temporary.
+EBS = Persistent, network-based.
+
+
+
+---
+
+## 💽 EBS Volume Types
+
+| Type | Technology | Best Use Case |
+|------|-------------|---------------|
+| gp2 / gp3 | SSD | General workloads (system, dev, virtual desktops) |
+| io1 / io2 / io2 Block Express | SSD | High-performance workloads (databases) |
+| st1 | HDD | Big data, log processing |
+| sc1 | HDD | Low-cost, infrequently accessed data |
+
+### Key Notes:
+- Volume characteristics = **Size | Throughput | IOPS**
+- Only **gp2/gp3** and **io1/io2** can be used as **boot volumes**.
+
+---
+
+### ⚙️ General Purpose SSD (gp2/gp3)
+
+- Balances **price and performance**.
+- Ideal for **boot volumes, dev/test**, and **virtual desktops**.
+
+#### gp3:
+- Baseline **3,000 IOPS**, scalable up to **16,000 IOPS**.
+- Max throughput **1,000 MB/s**.
+- Performance independent of volume size.
+
+#### gp2:
+- **IOPS scales with size** (3 IOPS per GB).
+- Max 16,000 IOPS at 5,334 GB.
+
+---
+
+### 🚀 Provisioned IOPS SSD (io1 / io2)
+
+- Designed for **mission-critical workloads** like databases.
+- **Provision IOPS** independent of volume size.
+
+#### io1:
+- Max **64,000 IOPS** (on Nitro instances).
+
+#### io2 / io2 Block Express:
+- **Sub-millisecond latency**
+- Up to **256,000 IOPS**
+- Supports **EBS Multi-Attach**
+- Used for **clustered applications**
+
+---
+
+### 📀 HDD Volumes (st1 / sc1)
+
+- Cannot be used as **boot volumes**.
+
+#### st1 (Throughput Optimized HDD):
+- For **big data, logs, streaming workloads**.
+- Max throughput: **500 MB/s**
+- Max IOPS: **500**
+
+#### sc1 (Cold HDD):
+- For **archive / rarely accessed data**.
+- Lowest cost option.
+- Max throughput: **250 MB/s**
+- Max IOPS: **250**
+
+---
+
+## 🤝 EBS Multi-Attach (io1/io2)
+
+- Attach **one EBS volume** to **multiple EC2 instances** (up to 16) **within same AZ**.
+- All instances can **read/write simultaneously**.
+- Used for **clustered or high-availability apps**.
+- Requires **cluster-aware filesystem** (XFS/EXT4 cluster mode).
+
+### Key Concepts:
+- Same EBS volume shared by multiple EC2s in one AZ.
+- Application must handle **concurrent writes** safely.
+- Supports **up to 16 instances**.
+
+### 🧭 Diagram:
+       +----------------+
+       |  EBS Volume    |
+       | (Shared io2)   |
+       +----------------+
+          /     |     \
+         /      |      \
+        v       v       v
+  [EC2-1]   [EC2-2]   [EC2-3]
+
+
+
+---
+
+## 🔐 EBS Encryption
+
+- Encrypts data using **AWS KMS (AES-256)**.
+- Automatically encrypts:
+  - Data **at rest**
+  - Data **in transit**
+  - **Snapshots** of encrypted volumes
+  - **New volumes** from those snapshots
+
+- Encryption is **transparent** (no manual key handling).
+- Minimal performance impact.
+
+### 🧭 Concept:
+[EC2 Instance] <----> [Encrypted EBS Volume]
+| |
+Data in Transit Data at Rest
+⬇️ ⬇️
+Encrypted via AWS KMS (AES-256)
+
+
+### 🪄 Encrypt an Existing Unencrypted Volume
+
+1. Take a **snapshot** of the unencrypted volume.  
+2. **Copy** the snapshot → enable encryption in copy settings.  
+3. **Create new volume** from the encrypted snapshot.  
+4. **Detach old volume** and attach the new encrypted one.
+
+---
+
+## 📁 Amazon EFS (Elastic File System)
+
+- Fully managed, **scalable NFS (Network File System)** for EC2.
+- Can be **mounted on multiple EC2 instances** across **different AZs**.
+- Behaves like a **shared file system** — all instances see updates instantly.
+- Automatically **replicates data across AZs** for high availability.
+- You **pay for used storage only** (auto-scales).
+
+### 🧭 Diagram:
+   +-----------+       +-----------+       +-----------+
+   | EC2 (AZ-a)|       | EC2 (AZ-b)|       | EC2 (AZ-c)|
+   +-----+-----+       +-----+-----+       +-----+-----+
+         \                   |                   /
+          \                  |                  /
+           \                 |                 /
+            v                v                v
+            +---------------------------------+
+            |        Amazon EFS File System   |
+            +---------------------------------+
+            (Shared access across AZs)
+
+
+
+---
+
+### 🌐 EFS Features / Use Cases
+
+- Ideal for **shared storage apps**.
+- Mounted using **NFSv4.1** protocol.
+- Can **restrict EC2 access** via Security Groups.
+- **Only Linux instances** can mount.
+- Data encrypted via **AWS KMS**.
+- Supports **Linux file permissions**.
+- **Auto-scales** (no provisioning needed).
+
+---
+
+## ⚡ EFS Performance & Throughput Modes
+
+| Category | Mode | Description |
+|-----------|------|--------------|
+| EFS Scale | 1000s of concurrent clients, 10+ GB/s | Massive parallel access |
+| Performance Mode | General Purpose | Low-latency for web/CMS apps |
+| Performance Mode | Max I/O | Parallel workloads (big data) |
+| Throughput Mode | Bursting | Auto throughput scaling |
+| Throughput Mode | Provisioned | User-defined throughput |
+| Throughput Mode | Elastic | Fully auto throughput |
+
+---
+
+## 💰 EFS Storage Classes
+
+| Category | Type | Description |
+|-----------|------|--------------|
+| Storage Tier | Standard | For frequently accessed files |
+| Storage Tier | Infrequent Access (IA) | Cheaper for rarely accessed |
+| Storage Tier | Archive | Cheapest long-term tier |
+| Lifecycle Policy | Automatic movement | Moves data after X days idle |
+| Availability | Multi-AZ (Standard) | Production-grade, highly available |
+| Availability | One Zone | Cheaper, single-AZ storage |
+| Cost Savings | Lifecycle tiers | Up to 90% cheaper via IA or One Zone |
+
+### 🧭 Diagram:
+[EFS Standard] ---> [EFS Infrequent Access]
+| (No access for 60 days)
+v
+File auto-moved by lifecycle policy → reduces cost automatically.
+
+
+
+---
+
+## 🧩 Summary
+
+| Storage Type | Durability | Performance | Shared Access | Use Case |
+|---------------|-------------|--------------|----------------|-----------|
+| **EBS** | Persistent | High | ❌ | Boot volumes, databases |
+| **Instance Store** | Ephemeral | Very High | ❌ | Temp/cache data |
+| **EFS** | Persistent | Medium | ✅ | Shared Linux storage |
+
+---
