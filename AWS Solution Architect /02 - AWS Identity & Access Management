@@ -1,0 +1,173 @@
+# 🔐 AWS IAM (Identity & Access Management)
+
+---
+
+## 🌍 Overview
+
+**IAM (Identity & Access Management)**  
+→ A **global AWS service** used to securely manage *who can access what* in your AWS environment.
+
+- **Users** → Individual identities (people or applications) with their own credentials and permissions.  
+- **Groups** → Collections of IAM users that share the same permissions. (Groups cannot contain other groups.)  
+- **Root Account** → The main AWS account created at signup with **full unrestricted access**. Never use it for daily work.  
+- **User Membership** → A user may belong to multiple groups and can exist without belonging to any group.  
+- **Policies** → JSON documents that define **what actions are allowed or denied** on AWS resources.  
+- **Least Privilege Principle** → Always grant the **minimum permissions** required to perform a task.
+
+---
+
+## 🧾 IAM Policy Structure
+
+### IAM Policy
+A **JSON document** that defines **who** can perform **what actions** on **which resources**, and under **what conditions**.
+
+### Policy Components
+| Component | Description |
+|------------|--------------|
+| **Version** | Specifies the policy language version (always use `"2012-10-17"`). |
+| **Id** *(optional)* | Unique identifier for the policy. |
+| **Statement** | The actual permission rules (mandatory). |
+
+### Statement Elements
+| Element | Description |
+|----------|--------------|
+| **Sid** *(optional)* | Unique ID for the statement. |
+| **Effect** | `Allow` or `Deny` — specifies whether access is permitted. |
+| **Principal** | Defines who is allowed/denied (used only in trust policies). |
+| **Action** | Specifies actions (e.g., `s3:GetObject`). |
+| **Resource** | AWS resources affected (e.g., bucket ARN). |
+| **Condition** *(optional)* | Conditions under which the policy applies. |
+
+---
+
+## 🔑 Password & MFA Security
+
+### **Password Policy**
+Defines strong password rules (length, complexity, rotation, and reuse prevention) to secure IAM user accounts.
+
+### **MFA (Multi-Factor Authentication)**
+Adds a second authentication layer beyond password — protecting accounts even if passwords are compromised.
+
+**Concept:** Combines something you know (**password**) with something you have (**device/code**) to prevent unauthorized access.
+
+### MFA Types
+| Type | Description |
+|------|--------------|
+| **Virtual MFA (Google Authenticator / Authy)** | Generates time-based codes on mobile devices. |
+| **U2F Security Key (YubiKey)** | Physical USB key for secure login (plug-and-play). |
+| **Hardware Key Fob** | Generates one-time passcodes without a phone. |
+
+---
+
+## 💻 IAM Access Methods
+
+| Method | What It Is | When to Use |
+|--------|-------------|-------------|
+| **AWS Management Console (GUI)** | Web-based UI protected by username/password + MFA | For visual management and manual tasks |
+| **AWS CLI (Command Line Interface)** | Tool to access AWS services via terminal commands, secured by Access Keys | For automation, scripting, faster execution |
+| **AWS SDK (Software Development Kit)** | Programming libraries (Python, Java, Node.js, etc.) to access AWS via code | For building applications that interact with AWS services |
+
+🧠 **Quick Memory Tip:**  
+- **Console = Click**  
+- **CLI = Commands**  
+- **SDK = Code**
+
+---
+
+## ⚠️ Important Security Notes
+
+- **Access Keys** = sensitive credentials (`Access Key ID` + `Secret Access Key`)  
+- Treat them like passwords — **never share or commit to GitHub!**  
+- **Access Key ID ≈ username**, **Secret Key ≈ password**  
+- Keys are generated from AWS Console and can be rotated periodically.  
+
+---
+
+## 🧠 What is AWS SDK?
+
+The **AWS SDK (Software Development Kit)** allows developers to interact with AWS services programmatically using languages like **Python, Java, Node.js**, etc.
+
+### Why Use It?
+Because applications often need to communicate with AWS automatically — e.g.:
+- Create an EC2 instance  
+- Upload files to S3  
+- Read messages from SQS  
+
+Instead of logging into the console manually, SDK functions perform these operations via code.
+
+### Key Points
+| Slide Point | Explanation |
+|--------------|-------------|
+| **Language-specific APIs (libraries)** | Ready-made SDKs eliminate the need for raw API calls. |
+| **Programmatic AWS access** | Automate AWS actions directly from your code. |
+| **Embedded in applications** | SDK is installed inside your project/app. |
+| **Supports many languages** | SDKs available for Python, Java, Node.js, PHP, Go, .NET, Android, iOS, IoT, etc. |
+| **AWS CLI uses AWS SDK (boto3)** | The AWS CLI internally runs on the Python SDK. |
+
+---
+
+## 🧩 IAM Roles for Services
+
+AWS **IAM Roles** allow **services** (like EC2, Lambda, CloudFormation) to access **other AWS services securely** without using static access keys.
+
+### How It Works
+1. An AWS service (e.g., EC2, Lambda) needs to access another service (e.g., S3, DynamoDB).  
+2. You **attach an IAM Role** with the required permissions.  
+3. AWS automatically provides **temporary credentials** to that service.  
+4. The service can now perform allowed actions securely.
+
+### Examples
+- EC2 instance uploading files to **S3**.  
+- Lambda function reading data from **DynamoDB**.  
+
+---
+
+## 🧰 IAM Security Tools
+
+| Tool | Scope | Description |
+|------|--------|-------------|
+| **IAM Credentials Report** | Account-level | Lists all IAM users and credential statuses (passwords, access keys, MFA). Helps find risks such as unused credentials or no MFA. |
+| **IAM Access Advisor** | User-level | Shows which services a user has access to and when they last used them. Helps identify unused permissions. |
+
+---
+
+## 🧱 Diagram – IAM Concept Overview
+
+```mermaid
+graph TD
+    A[Root Account 🔑] --> B[IAM Users 👤]
+    A --> C[IAM Groups 👥]
+    B --> D[IAM Policies 📜]
+    C --> D
+    D --> E[AWS Resources ☁️]
+    A --> F[IAM Roles 🧩]
+    F --> E
+    E --> G[Services: EC2, S3, Lambda ⚙️]
+
+🛡️ IAM Guidelines & Best Practices
+| Best Practice                                          | Why It Matters                                                              |
+| ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Don’t use the **root account** except during setup     | Root has unrestricted power — misuse can compromise the entire AWS account. |
+| One physical person = One IAM user                     | Ensures accountability and audit tracking.                                  |
+| Assign permissions to **groups**, not individual users | Easier management and consistent access control.                            |
+| Create and enforce a strong **password policy**        | Improves account security.                                                  |
+| Enable and enforce **MFA**                             | Adds extra protection against stolen passwords.                             |
+| Use **IAM Roles** instead of embedding credentials     | Prevents exposure of static access keys.                                    |
+| Use **Access Keys** only for CLI/SDK                   | Do not use console passwords for automation.                                |
+| Regularly **audit permissions** using IAM tools        | Helps maintain least privilege and detect stale credentials.                |
+| Never share IAM users or Access Keys                   | Maintains accountability and prevents unauthorized access.                  |
+
+🧭 IAM Section – Summary
+| Term            | Meaning / Why It Matters                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| **Users**       | Represents a real human or app. Has long-term credentials and can log in using a password. |
+| **Groups**      | Collection of IAM users. Simplifies permission management (e.g., Admins, Developers).      |
+| **Policies**    | JSON documents that define allowed or denied actions on AWS resources.                     |
+| **Roles**       | Temporary permissions for AWS services or external identities (e.g., EC2 → S3).            |
+| **Security**    | Implement MFA & strong password policies for safety.                                       |
+| **AWS CLI**     | Manage AWS from the terminal via commands.                                                 |
+| **AWS SDK**     | Code-based AWS interaction for developers.                                                 |
+| **Access Keys** | For programmatic access (CLI/SDK). Should be rotated regularly.                            |
+| **Audit Tools** | Use IAM Credential Report & Access Advisor to review access and detect risks.              |
+
+
