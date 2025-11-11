@@ -1,0 +1,154 @@
+# AWS Networking & EC2 Concepts
+
+## Public IP
+- A public IP is an IP address that is reachable from the internet (WWW).
+- It is globally unique, routable on the internet, and can be used to access a machine from anywhere.
+
+## Private IP
+- A private IP is used within a private/internal network (like inside AWS VPC or an office network).
+- It is unique only within that internal network and cannot be accessed from the internet directly.
+- To reach the internet, machines with private IPs use **NAT (Network Address Translation)**.
+
+## Elastic IP (EIP)
+- An Elastic IP is a static public IPv4 address provided by AWS.
+- It stays the same even if an EC2 instance is stopped or restarted.
+- It can be remapped to another instance during failures.
+
+---
+
+## Networking Overview (IPv4 / IPv6)
+- **IPv4** is the most widely used; **IPv6** is newer and supports far more addresses.
+
+### Public IP
+- Identifies a machine on the internet (WWW).
+- Must be globally unique across the internet.
+- Can be geographically located.
+
+### Private IP
+- Identifies a machine inside a private/internal network.
+- Must be unique only within that private network.
+- Multiple private networks can reuse the same private IP ranges.
+- Machines with private IPs reach the internet using **NAT / Internet Gateway**.
+- Only specific IP ranges are allowed as private IPs (**RFC1918**).
+
+### Elastic IP
+- An EC2 instance may get a new public IP after stop/start; Elastic IP prevents that.
+- A static public IPv4 address owned by your AWS account.
+- Only one instance can use an Elastic IP at a time.
+- AWS limits Elastic IPs (default: 5 per account).
+- Avoid Elastic IPs when possible; prefer DNS names or Load Balancers.
+
+### In AWS EC2
+- EC2 gets both a private IP (internal AWS network) and a public IP (internet).
+- For SSH from outside, we must use the public IP.
+- Stopping & starting EC2 may change the public IP (unless Elastic IP is used).
+
+---
+
+## Placement Groups
+
+### What is a Placement Group?
+A **Placement Group** in AWS EC2 is a logical grouping of instances that controls how those EC2 instances are placed on underlying hardware inside AWS data centers.
+
+AWS normally decides placement automatically, but with Placement Groups, you can influence placement based on workload needs.
+
+---
+
+### 1. Cluster Placement Group
+- Places EC2 instances close together in the same Availability Zone for **high network throughput and low latency**.
+**Diagram Explanation:**
+- Multiple EC2 instances grouped tightly within the same AZ and interconnected with high-bandwidth links (10+ Gbps).
+- Because they are physically close, network latency is extremely low.
+- **Cluster PG = All instances in one AZ for highest speed, lowest latency (but lower fault tolerance).**
+
+---
+
+### 2. Spread Placement Group
+- Places EC2 instances across different underlying hardware (and possibly across multiple AZs) to **minimize failure impact**.
+**Diagram Explanation:**
+- EC2 instances are placed on different racks and AZs, ensuring that if one rack fails, only one instance is affected.
+- **One-liner:** Spread PG = Each instance on different hardware/AZ to maximize availability (max 7 per AZ).
+
+---
+
+### 3. Partition Placement Group
+- Divides EC2 instances into logical partitions, ensuring instances in each partition use separate racks — ideal for **large distributed systems (Hadoop, Kafka, Cassandra)**.
+**Diagram Explanation:**
+- EC2 instances grouped into partitions (Partition 1, 2, 3) across AZs.
+- Each partition runs independently; rack failures affect only that partition.
+- **One-liner:** Partition PG = Instances grouped into partitions; racks not shared between partitions (hundreds of instances).
+
+---
+
+## ENI (Elastic Network Interface)
+
+### What is an ENI?
+- An **ENI (Elastic Network Interface)** is a virtual network card for your EC2 instance.
+- Think of it like a real NIC (Network Interface Card) — but it exists inside AWS within a **VPC (Virtual Private Cloud)**.
+
+### ENI Attributes
+| Attribute | Meaning |
+|------------|----------|
+| Primary private IP | Main internal IP used by the instance inside a VPC |
+| Secondary private IPs (optional) | Additional internal IPs attached to the same ENI |
+| Elastic IP (optional) | Public static IP mapped to private IP |
+| Public IPv4 (optional) | Public IP assigned dynamically |
+| Security groups | Firewall rules controlling traffic |
+| MAC address | Unique hardware address (like real NICs) |
+
+### Why is it Important?
+- ENIs can be **moved between EC2 instances**.
+- If one instance fails, detach the ENI and attach it to another instance — without changing IPs, security groups, or firewall rules.
+
+**Diagram Explanation:**
+- One EC2 instance has two ENIs:
+  - `eth0` = primary ENI (IP: 192.168.0.31)
+  - `eth1` = secondary ENI (IP: 192.168.0.42)
+- The secondary ENI can be moved to another instance if needed.
+- Instead of reconfiguring IPs or rules, just attach the ENI to a new instance.
+
+**Simple Analogy:**
+- Like a **SIM card in a phone**:
+  - SIM stores number, identity, and network details.
+  - If your phone breaks, move the SIM to another phone — number remains the same.
+
+---
+
+## EC2 Hibernate
+
+### What is EC2 Hibernate?
+- EC2 Hibernate allows you to **pause an EC2 instance** and resume it later with everything in memory (RAM) preserved — similar to hibernating a laptop.
+
+### What Normally Happens When You STOP an Instance (without Hibernate)?
+- When you stop an EC2 instance:
+  - The OS shuts down.
+  - Data stored in **RAM** is lost.
+  - Data on **EBS volumes** (root + attached) remains.
+
+### What Happens When You TERMINATE an Instance?
+- The instance is **deleted**.
+- EBS volumes (unless configured to retain) are also deleted.
+
+### What’s Different with EC2 HIBERNATE?
+When you hibernate:
+- EC2 captures **RAM contents** (applications, cache, sessions, etc.).
+- RAM state is saved to the **root EBS volume**.
+- When the instance starts again, it reloads the RAM content.
+- Your system continues from where it left — **no reboot, no app restart, no warmup**.
+
+---
+
+### Important Requirements
+| Requirement | Explanation |
+|--------------|--------------|
+| Instances supported | C3, C4, C5, M3, M4, R3, R4, T2, T3 |
+| Max RAM allowed | Must be less than 150 GB |
+| Root volume | Must be EBS, encrypted, not instance-store |
+| AMI support | Amazon Linux 2, Ubuntu, CentOS, Windows, etc. |
+| Pricing | Works with On-Demand, Reserved, and Spot |
+| Hibernate retention | Cannot stay in hibernate for more than 60 days |
+
+---
+
+### Summary in One Sentence
+**EC2 Hibernate** keeps the RAM content on EBS so that when you restart, your instance resumes exactly from where it left off — **no reboot, no app restart, no reloading time**.
