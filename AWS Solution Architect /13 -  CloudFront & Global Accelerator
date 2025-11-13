@@ -1,0 +1,1617 @@
+# Amazon CloudFront & AWS Global Accelerator
+
+---
+
+# Amazon CloudFront Overview
+
+## What is CloudFront?
+
+**CloudFront** is a **Content Delivery Network (CDN)** that caches content at edge locations worldwide to improve read performance and user experience and provides DDoS protection.
+
+### Key Features:
+
+- ✅ **Improves read performance** by caching content at the edge
+- ✅ **Improves user experience** through faster delivery
+- ✅ **Hundreds of Points of Presence globally** (edge locations and regional edge caches)
+- ✅ **DDoS protection** via global distribution
+- ✅ **Integrates with AWS Shield** and **AWS Web Application Firewall**
+
+## Architecture Diagram Explanation:
+
+**Global Distribution:**
+
+    Users in Different Regions
+         |
+         | Request content
+         |
+         v
+    ┌──────────────────────────────────────────────────────┐
+    |         CloudFront Global Network                    |
+    |                                                      |
+    |  North America:                                      |
+    |    • Edge Locations (multiple)                       |
+    |    • Regional Edge Cache                             |
+    |                                                      |
+    |  Europe:                                             |
+    |    • Edge Locations (multiple)                       |
+    |    • Regional Edge Cache                             |
+    |                                                      |
+    |  Asia:                                               |
+    |    • Edge Locations (multiple)                       |
+    |    • Regional Edge Cache                             |
+    |                                                      |
+    |  South America:                                      |
+    |    • Edge Locations                                  |
+    |                                                      |
+    |  Australia:                                          |
+    |    • Edge Locations                                  |
+    |                                                      |
+    └──────────────┬───────────────────────────────────────┘
+                   |
+                   | Cache Miss
+                   |
+                   v
+              ┌────────────┐
+              |   Origin   |
+              |   Server   |
+              | (S3/HTTP)  |
+              | Southeast  |
+              |    Asia    |
+              └────────────┘
+
+**Components shown:**
+
+- **Users** in North America and Asia requesting content
+- **Edge locations** (blue dots) distributed globally
+- **Multiple edge locations** (purple dots) in high-traffic areas
+- **Regional edge caches** (orange circles) as intermediate caching layers
+- **Origin server** (green S3 bucket icon) in Southeast Asia
+
+**Data flow:**
+Users → Edge locations/Regional caches → Origin server (only when cache misses)
+
+---
+
+# CloudFront – Origins
+
+## Overview
+
+CloudFront can fetch content from various origin types depending on your use case.
+
+### 1. S3 Bucket Origin
+
+**Use Case:** Distributing static files globally
+
+**Features:**
+- Distributes and caches files at the edge
+- Supports **uploading files to S3 via CloudFront**
+- Secured using **Origin Access Control (OAC)**
+
+**Architecture:**
+
+    CloudFront Edge Location
+           ↓
+    Origin Access Control (OAC)
+           ↓
+    S3 Bucket (Private)
+
+**Security:**
+- S3 bucket remains private
+- Only CloudFront can access it via OAC
+- Prevents direct S3 access
+
+### 2. VPC Origin
+
+**Use Case:** Applications in VPC private subnets
+
+**Supported Resources:**
+- Application Load Balancer (ALB)
+- Network Load Balancer (NLB)
+- EC2 instances
+
+**Architecture:**
+
+    CloudFront Edge Location
+           ↓
+    VPC Origin Connection
+           ↓
+    VPC Private Subnet
+           ↓
+    ALB/NLB/EC2 (Private)
+
+**Benefits:**
+- Keep applications private
+- No internet exposure
+- Secure delivery
+
+### 3. Custom Origin (HTTP)
+
+**Use Case:** Any HTTP backend
+
+**Supported:**
+- S3 website (requires static website hosting enabled)
+- Any public HTTP backend
+- On-premises servers
+- Custom web applications
+
+**Requirements:**
+- Must be publicly accessible via HTTP/HTTPS
+- Must accept connections from CloudFront IPs
+
+---
+
+# CloudFront at a High Level
+
+## Workflow
+
+**Step-by-Step Process:**
+
+1. **Client sends HTTP request**
+   - Example: `GET /beach.jpg?size=300x300`
+
+2. **Request goes to the nearest CloudFront Edge Location**
+   - Determined by geographic proximity
+   - Anycast routing to nearest edge
+
+3. **Edge Location checks local cache**
+   - Looks for requested object in cache
+   - Checks if cached copy is still valid (TTL not expired)
+
+4. **Cache Hit:** If cached and valid
+   - Content served directly from edge cache
+   - Ultra-fast response (milliseconds)
+   - No origin request needed
+
+5. **Cache Miss:** If not cached or expired
+   - Edge location fetches from origin
+   - Origin types: S3 bucket or custom HTTP server
+   - Content retrieved over AWS backbone network
+
+6. **Content cached at edge and delivered to client**
+   - Future requests served from cache
+   - Cache duration based on TTL settings
+
+## Diagram: Request Flow
+
+    Client
+      |
+      | HTTP Request: GET /beach.jpg
+      |
+      v
+    ┌─────────────────────────┐
+    | CloudFront Edge         |
+    | Location                |
+    |                         |
+    | Cache Check:            |
+    | ├─ Hit? → Serve         |
+    | └─ Miss? → Fetch Origin |
+    └──────────┬──────────────┘
+               |
+               | (Cache Miss)
+               |
+               v
+          ┌─────────┐
+          | Origin  |
+          | (S3 or  |
+          |  HTTP)  |
+          └─────────┘
+
+## Benefits:
+
+- ✅ **Reduced latency** via edge caching
+- ✅ **Lower origin load** (fewer requests reach origin)
+- ✅ **Faster content delivery** (cached content served locally)
+- ✅ **Cost savings** (less data transfer from origin)
+
+---
+
+# CloudFront – S3 as an Origin
+
+## Architecture
+
+**Global Distribution:**
+
+    User in Los Angeles ────────┐
+                                |
+    User in Mumbai ─────────────┼──► Edge Locations
+                                |    (Los Angeles, Mumbai,
+    User in São Paulo ──────────┤     São Paulo, Melbourne)
+                                |
+    User in Melbourne ──────────┘
+                                |
+                                | AWS Private Network
+                                | (Cache Miss)
+                                |
+                                v
+                        ┌────────────────┐
+                        |  S3 Bucket     |
+                        |  (Origin)      |
+                        |                |
+                        | Origin Access  |
+                        | Control (OAC)  |
+                        └────────────────┘
+
+**Components:**
+
+1. **Central S3 bucket** as origin (single location)
+2. **Four Edge locations**:
+   - Los Angeles (North America)
+   - Mumbai (Asia)
+   - São Paulo (South America)
+   - Melbourne (Australia)
+3. **Users** connect via public internet to nearest edge
+4. **Edge locations** connect to origin via private AWS network
+
+## Security
+
+### Origin Access Control (OAC)
+
+**How it works:**
+
+    CloudFront Distribution
+         |
+         | OAC Identity
+         |
+         v
+    S3 Bucket Policy:
+    - Allow CloudFront OAC
+    - Deny direct public access
+
+**S3 Bucket Policy Example:**
+
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "cloudfront.amazonaws.com"
+          },
+          "Action": "s3:GetObject",
+          "Resource": "arn:aws:s3:::my-bucket/*",
+          "Condition": {
+            "StringEquals": {
+              "AWS:SourceArn": "arn:aws:cloudfront::account-id:distribution/distribution-id"
+            }
+          }
+        }
+      ]
+    }
+
+**Security Features:**
+- ✅ S3 bucket **not publicly accessible**
+- ✅ Only CloudFront can access it via OAC
+- ✅ Traffic between edge locations and S3 uses **AWS backbone network**
+- ✅ No public internet traversal for origin fetches
+
+## Benefits:
+
+- ✅ **Fast global delivery** (content cached at edges)
+- ✅ **Secure origin access** (S3 remains private)
+- ✅ **Optimized AWS network paths** (no public internet for origin requests)
+- ✅ **Reduced S3 costs** (fewer direct S3 requests)
+
+---
+
+# CloudFront vs S3 Cross Region Replication
+
+## Comparison Table
+
+| Feature | CloudFront | S3 Cross Region Replication |
+|---------|------------|----------------------------|
+| **Type** | Content Delivery Network (CDN) | Data Replication |
+| **Distribution** | Global edge network (hundreds of locations) | Configured per region pair |
+| **Caching** | Files cached for a TTL (e.g., 1 day) | No caching; full copy in each region |
+| **Update Speed** | Based on TTL expiration | Near real-time (within minutes) |
+| **Write Access** | Read-only from edges | Read-only replicas |
+| **Setup** | Single configuration for global reach | Must configure per region |
+| **Cost Model** | Pay for data transfer out | Pay for storage + replication |
+| **Best For** | Static content globally available | Dynamic content in specific regions |
+
+## CloudFront
+
+**Characteristics:**
+- Uses **global edge network** (200+ edge locations)
+- Files **cached for a TTL** (e.g., a day)
+- **Best for static content** that must be available everywhere
+
+**Use Cases:**
+- Static websites
+- Images and videos
+- CSS/JS files
+- Software downloads
+- Streaming media
+
+**Example Scenario:**
+
+    Global Website
+         ↓
+    Static assets (images, CSS, JS)
+         ↓
+    CloudFront (cached at 200+ edges)
+         ↓
+    Fast access from anywhere
+
+## S3 Cross Region Replication
+
+**Characteristics:**
+- Must be **configured per region** (source → destination)
+- Files **updated in near real-time** (minutes)
+- **Read-only replicas**
+- **Best for dynamic content** that needs low-latency access in specific regions
+
+**Use Cases:**
+- Disaster recovery
+- Compliance (data residency requirements)
+- Regional data requirements
+- Low-latency access in specific regions
+- Backup and archival
+
+**Example Scenario:**
+
+    Application Database Backups
+         ↓
+    S3 in us-east-1
+         ↓
+    Replicated to eu-west-1 (minutes)
+         ↓
+    Compliance + DR
+
+## When to Use What?
+
+| Scenario | Solution |
+|----------|----------|
+| Static website with global audience | **CloudFront** |
+| User-uploaded images served worldwide | **CloudFront** |
+| Video streaming to multiple regions | **CloudFront** |
+| Disaster recovery for S3 data | **S3 CRR** |
+| Compliance requiring data in specific region | **S3 CRR** |
+| Dynamic content with regional users | **S3 CRR** + regional endpoints |
+| Low-latency reads in 2-3 specific regions | **S3 CRR** |
+
+---
+
+# CloudFront – ALB or EC2 as an Origin Using VPC Origins
+
+## Overview
+
+CloudFront can use resources in **private VPC subnets** as origins **without exposing them to the internet**.
+
+### Benefits:
+
+- ✅ Deliver content from applications in **private subnets**
+- ✅ **No need to expose origins** to the internet
+- ✅ **Enhanced security** (no public IPs required)
+- ✅ Simplified security group rules
+
+### Supported Origins:
+
+- Application Load Balancer (ALB)
+- Network Load Balancer (NLB)
+- EC2 instances
+
+## Architecture: VPC Origin
+
+    Users (Global)
+         |
+         | HTTPS
+         |
+         v
+    ┌────────────────────────┐
+    | CloudFront             |
+    | Edge Locations         |
+    └──────────┬─────────────┘
+               |
+               | VPC Origin Connection
+               | (Private AWS Network)
+               |
+               v
+    ┌─────────────────────────────────────┐
+    |             VPC                     |
+    |                                     |
+    |   ┌─────────────────────────┐      |
+    |   |   Private Subnet        |      |
+    |   |                         |      |
+    |   |   ┌──────────────┐      |      |
+    |   |   | ALB / NLB    |      |      |
+    |   |   | or EC2       |      |      |
+    |   |   | (Private IP) |      |      |
+    |   |   └──────────────┘      |      |
+    |   |                         |      |
+    |   └─────────────────────────┘      |
+    |                                     |
+    └─────────────────────────────────────┘
+
+**Flow:**
+1. Users request content from CloudFront
+2. CloudFront edge receives request
+3. Edge connects to **VPC Origin** (private connection)
+4. VPC Origin routes to private subnet resources
+5. ALB/NLB/EC2 in private subnet processes request
+6. Response returned via same private path
+
+**Key Points:**
+- No public IP needed for origin resources
+- Traffic flows privately through VPC Origin
+- Enhanced security (resources never exposed)
+- Simplified architecture (no NAT gateways for outbound)
+
+---
+
+# CloudFront – ALB or EC2 as an Origin Using Public Network
+
+## Scenario 1: CloudFront with EC2 Instances (Public Network)
+
+**Architecture:**
+
+    Users (Global)
+         |
+         | HTTPS
+         |
+         v
+    CloudFront Edge Locations
+         |
+         | Public Internet
+         | (CloudFront Edge IPs)
+         |
+         v
+    ┌────────────────────────┐
+    |  EC2 Instances         |
+    |  (Public IP/Elastic IP)|
+    |                        |
+    |  Security Group:       |
+    |  - Allow CloudFront    |
+    |    Edge IPs            |
+    └────────────────────────┘
+
+**Requirements:**
+- ✅ EC2 instances **must be public** (public IP or Elastic IP)
+- ✅ EC2 security group **must allow CloudFront edge location public IPs**
+- ✅ Reference for CloudFront IPs: http://d7uri8nf7uskq.cloudfront.net/tools/list-cloudfront-ips
+
+**Security Group Rule Example:**
+
+    Type: HTTPS
+    Protocol: TCP
+    Port: 443
+    Source: CloudFront IP ranges (managed prefix list)
+
+## Scenario 2: CloudFront with Application Load Balancer (Public Network)
+
+**Architecture:**
+
+    Users (Global)
+         |
+         | HTTPS
+         |
+         v
+    CloudFront Edge Locations
+         |
+         | Public Internet
+         | (CloudFront Edge IPs)
+         |
+         v
+    ┌────────────────────────────────────┐
+    |  Application Load Balancer         |
+    |  (Public/Internet-facing)          |
+    |                                    |
+    |  Security Group:                   |
+    |  - Allow CloudFront Edge IPs       |
+    └──────────────┬─────────────────────┘
+                   |
+                   | Private Subnet
+                   |
+                   v
+    ┌────────────────────────────────────┐
+    |  EC2 Instances (Private)           |
+    |                                    |
+    |  Security Group:                   |
+    |  - Allow ALB Security Group        |
+    └────────────────────────────────────┘
+
+**Requirements:**
+- ✅ ALB **must be internet-facing** (public)
+- ✅ ALB security group **must allow CloudFront edge location public IPs**
+- ✅ EC2 instances **can be private**
+- ✅ EC2 security group **allows ALB security group**
+
+**Security Group Configuration:**
+
+**ALB Security Group:**
+
+    Inbound:
+    Type: HTTPS
+    Protocol: TCP
+    Port: 443
+    Source: CloudFront IP ranges
+
+**EC2 Security Group:**
+
+    Inbound:
+    Type: HTTP
+    Protocol: TCP
+    Port: 80
+    Source: ALB Security Group (sg-xxxxx)
+
+## Comparison: Direct EC2 vs Via ALB
+
+| Aspect | Direct EC2 | Via ALB |
+|--------|-----------|---------|
+| **EC2 Public Access** | Must be public | Can be private |
+| **Load Balancing** | No built-in | Yes (ALB) |
+| **Health Checks** | Manual setup | Built-in (ALB) |
+| **SSL/TLS Termination** | On EC2 | On ALB |
+| **Auto Scaling** | More complex | Simpler (ALB + ASG) |
+| **Security** | Less secure (EC2 exposed) | More secure (EC2 private) |
+| **Use Case** | Simple, single instance | Production, scalable apps |
+
+**Best Practice:**
+- Use **VPC Origin** when possible (most secure)
+- Use **ALB** for public origins (better than direct EC2)
+- Use **Direct EC2** only for simple dev/test scenarios
+
+---
+
+# CloudFront Geo Restriction
+
+## Overview
+
+**Restrict access** to your distribution based on **geographic location** of the user.
+
+### Methods:
+
+#### 1. Allowlist (Whitelist)
+- Only **specified countries** can access your content
+- All other countries are **blocked**
+
+#### 2. Blocklist (Blacklist)
+- **Specified countries** are blocked
+- All other countries can access
+
+## How It Works
+
+**Process:**
+
+    User Request
+         ↓
+    CloudFront Edge Location
+         ↓
+    Check User's IP Address
+         ↓
+    Lookup Country via Geo-IP Database (3rd party)
+         ↓
+    Check Geo Restriction Rules:
+    ├─ Allowed? → Serve Content
+    └─ Blocked? → Return 403 Forbidden
+
+**Technical Details:**
+- Country determined via a **third-party Geo-IP database**
+- Based on **requester IP address**
+- Happens at edge location (before origin request)
+
+## Use Cases
+
+### 1. Copyright Compliance
+- Content licensed only for specific countries
+- Example: Movie streaming rights for US only
+
+### 2. Regional Licensing Restrictions
+- Software licensed per country
+- Pharmaceutical content restricted by region
+
+### 3. Content Localization
+- Different content for different regions
+- Compliance with local laws (e.g., GDPR, data residency)
+
+### 4. Legal Requirements
+- Government-mandated content restrictions
+- Export control compliance
+
+## Configuration Example
+
+**Allow only US and Canada:**
+
+    Geo Restriction: Allowlist
+    Allowed Countries: US, CA
+    Result: Only US and Canada can access
+
+**Block sanctioned countries:**
+
+    Geo Restriction: Blocklist
+    Blocked Countries: [list of countries]
+    Result: Listed countries receive 403 Forbidden
+
+## Limitations
+
+- Based on **IP geolocation** (not 100% accurate)
+- Users with **VPNs** may bypass restrictions
+- For more robust geo-restriction, use **signed URLs/cookies** with custom logic
+
+---
+
+# CloudFront – Pricing
+
+## Pricing Model
+
+Data transfer out from CloudFront edge locations **varies by region and volume tier**.
+
+### Regional Pricing (First 10TB Tier)
+
+| Region | Price per GB |
+|--------|--------------|
+| **United States, Mexico, & Canada** | $0.085 |
+| **Europe & Israel** | $0.085 |
+| **South Africa, Kenya, & Middle East** | $0.110 |
+| **South America** | $0.110 |
+| **Japan** | $0.114 |
+| **Australia & New Zealand** | $0.114 |
+| **Hong Kong, Philippines, Singapore, South Korea, Taiwan, & Thailand** | $0.140 |
+| **India** | $0.170 |
+
+### Volume Tiers (Price Decreases with Volume)
+
+| Volume Tier | Cost Trend |
+|-------------|------------|
+| First 10TB | Base rate (shown above) |
+| Next 40TB | ~15% discount |
+| Next 100TB | ~25% discount |
+| Next 350TB | ~35% discount |
+| Next 524TB | ~40% discount |
+| Next 4PB | ~45% discount |
+| Over 5PB | ~50% discount |
+
+**Example Pricing Breakdown (US/Canada/Mexico):**
+- 0-10 TB: $0.085/GB
+- 10-50 TB: $0.080/GB
+- 50-150 TB: $0.060/GB
+- 150-500 TB: $0.040/GB
+- 500+ TB: $0.030/GB
+
+## Cost Trend Summary
+
+**Lowest Cost Regions:**
+- North America (US, Canada, Mexico)
+- Europe & Israel
+
+**Moderate Cost Regions:**
+- South Africa, Kenya, Middle East
+- South America
+- Japan
+- Australia & New Zealand
+
+**Highest Cost Regions:**
+- Asia-Pacific (Hong Kong, Singapore, etc.)
+- India (most expensive at $0.170/GB)
+
+## Additional Charges (Not Shown in Base Pricing)
+
+- **HTTPS requests:** $0.01 per 10,000 requests
+- **HTTP requests:** $0.0075 per 10,000 requests
+- **Invalidation requests:** First 1,000 paths free per month, then $0.005 per path
+- **Dedicated IP custom SSL:** $600 per month per certificate
+- **Field-level encryption requests:** $0.02 per 10,000 requests
+
+---
+
+# CloudFront – Price Classes
+
+## Overview
+
+Select **which edge locations to use** to manage costs vs. performance.
+
+### Price Classes:
+
+#### Price Class All
+- **Coverage:** All regions globally
+- **Performance:** Best (lowest latency everywhere)
+- **Cost:** Highest
+- **Use case:** Global application requiring best performance everywhere
+
+#### Price Class 200
+- **Coverage:** Most regions, excludes most expensive
+- **Performance:** Good (covers most users)
+- **Cost:** Moderate
+- **Use case:** Balanced cost and coverage for most applications
+
+#### Price Class 100
+- **Coverage:** Only least expensive regions
+- **Performance:** Lower (limited to NA and Europe)
+- **Cost:** Lowest
+- **Use case:** Cost-sensitive with users primarily in NA/Europe
+
+## Coverage by Price Class
+
+### Price Class 100 (Lowest Cost)
+
+**Included Regions:**
+- ✅ United States, Canada, Mexico
+- ✅ Europe & Israel
+
+**Excluded Regions:**
+- ❌ South America
+- ❌ Asia-Pacific
+- ❌ Australia/New Zealand
+- ❌ Africa (except parts covered)
+- ❌ Middle East (except Israel)
+
+### Price Class 200 (Balanced)
+
+**Included Regions:**
+- ✅ United States, Canada, Mexico
+- ✅ Europe & Israel
+- ✅ South Africa, Kenya, Middle East
+- ✅ Japan
+- ✅ Hong Kong, Philippines, Singapore, South Korea, Taiwan, Thailand
+- ✅ India
+
+**Excluded Regions:**
+- ❌ South America
+- ❌ Australia & New Zealand
+
+### Price Class All (Best Performance)
+
+**Included Regions:**
+- ✅ All regions globally (no exclusions)
+
+## Trade-Offs
+
+| Price Class | Cost | Coverage | Performance | Best For |
+|-------------|------|----------|-------------|----------|
+| **100** | Lowest | Limited (NA + Europe) | Good in included regions | Cost-sensitive, NA/EU users |
+| **200** | Moderate | Most regions | Good globally | Most applications |
+| **All** | Highest | Complete global | Best everywhere | Global apps, best UX |
+
+## Price Class Map Visual Description
+
+**Global Infrastructure Distribution:**
+
+    North America & Europe:
+    ████████████████ (High density)
+    - Many edge locations
+    - Regional edge caches
+    - Price Class 100 coverage
+
+    Asia-Pacific:
+    ████████ (Moderate density)
+    - Multiple edge locations
+    - Price Class 200 coverage (except AU/NZ)
+
+    South America & Australia:
+    ████ (Lower density)
+    - Fewer edge locations
+    - Price Class All only
+
+**Visual Legend:**
+- **Dark blue ellipse:** Price Class 100 (NA + Europe)
+- **Green ellipses:** Price Class 200 (adds Asia, parts of SA/Africa)
+- **Maroon ellipse:** Price Class All (everything)
+
+**Edge Location Types:**
+- **Light blue circles:** Standard edge locations
+- **Purple circles:** Multiple edge locations (high-density areas)
+- **Orange circles:** Regional edge caches (intermediate caching)
+
+**Distribution Pattern:**
+- Higher density in North America, Europe, and major Asian markets
+- Lower density in remote areas and emerging markets
+- Cost correlates with infrastructure density and local costs
+
+## Choosing the Right Price Class
+
+### Decision Matrix:
+
+**Choose Price Class 100 if:**
+- Users primarily in North America and Europe
+- Cost is priority
+- Acceptable for other regions to have higher latency
+
+**Choose Price Class 200 if:**
+- Global user base
+- Need balance of cost and performance
+- Most users covered
+
+**Choose Price Class All if:**
+- Users truly global
+- Performance is critical
+- Budget allows for premium service
+
+---
+
+# CloudFront – Cache Invalidations
+
+## Problem
+
+When **origin content is updated**, CloudFront continues serving **cached content** until TTL expires, leading to **stale content** being delivered to users.
+
+**Scenario:**
+
+    Time T0: /index.html v1 cached at edges (TTL: 24 hours)
+    Time T1: /index.html v2 uploaded to origin
+    Time T1-T24: Edges still serve v1 (stale)
+    Time T24: Cache expires, v2 fetched
+
+**Issue:** Users see old content for up to 24 hours!
+
+## Solution
+
+**Cache invalidation** forces a refresh, **bypassing TTL**.
+
+### How to Invalidate
+
+#### 1. Invalidate All Files
+
+**Pattern:** `*`
+
+**Effect:** Invalidates entire distribution
+
+**Use case:** Complete site refresh
+
+**Cost:** Expensive (all cached content marked invalid)
+
+#### 2. Invalidate Specific Paths
+
+**Patterns:**
+- `/images/*` - All images
+- `/index.html` - Single file
+- `/css/*.css` - All CSS files
+- `/api/users/*` - All user API responses
+
+**Effect:** Only specified paths invalidated
+
+**Use case:** Targeted updates
+
+**Cost:** First 1,000 paths free per month
+
+## Process Flow
+
+**Step-by-Step:**
+
+    1. Content Updated at Origin
+       ↓
+       Developer uploads new /index.html to S3
+    
+    2. Invalidation Request Sent
+       ↓
+       AWS Console / CLI / API:
+       Invalidate: /index.html, /images/*
+    
+    3. CloudFront Processes Request
+       ↓
+       Invalidation propagates to all edge locations
+    
+    4. Cache Invalidated at Edges
+       ↓
+       Cached items marked invalid (red X)
+       TTL no longer matters
+    
+    5. Subsequent Requests Fetch Fresh Content
+       ↓
+       Next request triggers fetch from origin
+       New content cached with fresh TTL
+
+**Diagram:**
+
+    Origin (S3)
+       ↓ (1) Upload new content
+    [index.html v2]
+       
+    CloudFront Distribution
+       ↓ (2) Invalidation Request
+    POST /2020-05-31/distribution/EXAMPLEID/invalidation
+    Body: { "Paths": ["/index.html", "/images/*"] }
+    
+    Edge Locations (Global)
+       ↓ (3) Propagate invalidation
+    [Cache Entry: /index.html] ❌ INVALID
+    [Cache Entry: /images/logo.png] ❌ INVALID
+    
+    User Request
+       ↓ (4) Next request
+    GET /index.html
+       ↓ (5) Cache miss (invalidated)
+       → Fetch from origin
+       → Return v2 to user
+       → Cache v2 with new TTL
+
+## Use Cases
+
+### 1. Immediate Content Updates
+- Breaking news on news site
+- Emergency notifications
+- Critical bug fixes in application
+
+### 2. Critical Fixes
+- Security vulnerability patch
+- Broken links or images
+- Incorrect information
+
+### 3. Real-Time Content Changes
+- Product price updates
+- Inventory changes
+- Event information updates
+
+### 4. Deployment
+- New application version
+- Website redesign
+- API changes
+
+## Best Practices
+
+### DO:
+
+✅ **Use specific paths** when possible
+- More cost-effective
+- Faster propagation
+- Less impact on cache hit ratio
+
+✅ **Batch invalidations**
+- Group related files in one request
+- Save on API calls
+
+✅ **Plan invalidation timing**
+- Coordinate with deployments
+- Schedule during low-traffic periods
+
+✅ **Use versioned URLs** instead
+- Example: `/assets/v2/style.css` instead of `/assets/style.css`
+- No invalidation needed
+- Better cache efficiency
+
+### DON'T:
+
+❌ **Invalidate everything frequently**
+- Very expensive
+- Defeats purpose of CDN
+- Increases origin load
+
+❌ **Use as primary cache control**
+- Use TTL settings instead
+- Reserve invalidation for emergencies
+
+❌ **Forget about costs**
+- First 1,000 paths free per month
+- After that: $0.005 per path
+- Wildcard `*` counts as many paths
+
+## Alternatives to Invalidation
+
+### 1. Versioned File Names
+- Use: `/assets/style-v2.css` instead of `/assets/style.css`
+- No invalidation needed
+- Instant updates
+- Best practice for static assets
+
+### 2. Short TTLs
+- Set lower TTL for frequently changing content
+- Example: 5 minutes for API responses
+- Balances freshness and caching
+
+### 3. Cache-Control Headers
+- Use `Cache-Control: max-age=0` for no caching
+- Use `Cache-Control: no-cache` for revalidation
+- Origin controls caching behavior
+
+## Invalidation vs Versioning Comparison
+
+| Method | Cost | Speed | Complexity | Best For |
+|--------|------|-------|------------|----------|
+| **Invalidation** | Expensive (after 1,000) | Minutes | Simple | Emergency fixes |
+| **Versioned URLs** | Free | Instant | Moderate | Regular deployments |
+| **Short TTL** | Free | Based on TTL | Simple | Dynamic content |
+| **Cache-Control** | Free | Immediate | Moderate | Fine-grained control |
+
+---
+
+# AWS Global Accelerator
+
+---
+
+# Global Users for Our Application – The Problem
+
+## Problem Statement
+
+Users access the application **over the public internet**, causing **many hops and high latency**.
+
+**Goal:** Route through the **AWS network** to minimize latency and improve performance.
+
+## Diagram: Current State (Without Global Accelerator)
+
+**Scenario:** Users accessing Application Load Balancer in India
+
+    User in America
+         |
+         | Public Internet: 5 hops
+         | (Each hop adds ~20-50ms latency)
+         |
+         v
+    ┌────────────────────┐
+    |                    |
+    | Public ALB         |
+    | (India Region)     | ◄─────┐
+    |                    |       |
+    └────────────────────┘       |
+         ▲                       |
+         |                       | Public Internet: 1 hop
+         | Public Internet: 4    |
+         | hops                  |
+         |                       |
+    User in Australia            |
+                                 |
+                           User in Europe
+
+**Latency by Region:**
+
+| Region | Hops | Approximate Latency |
+|--------|------|---------------------|
+| America → India | 5 hops | ~200-300ms |
+| Europe → India | 1 hop | ~50-100ms |
+| Australia → India | 4 hops | ~150-250ms |
+
+**Problems:**
+- ❌ Many network hops (each adds latency)
+- ❌ Unpredictable routing (public internet)
+- ❌ Potential packet loss
+- ❌ No control over network path
+- ❌ Security concerns (public internet exposure)
+
+---
+
+# Unicast IP vs Anycast IP
+
+## Understanding IP Addressing Models
+
+### Unicast IP
+
+**Definition:** One server has **one unique IP address**
+
+**How it works:**
+- Each server has its own distinct IP
+- Client **must know the specific IP** to connect
+- Client connects to a **specific server** by its IP
+- No automatic routing decisions
+
+**Diagram:**
+
+    Server 1 (IP: 1.2.3.4) ◄──── Client connects to 1.2.3.4
+    
+    Server 2 (IP: 5.6.7.8) ◄──── Client connects to 5.6.7.8
+    
+    Server 3 (IP: 9.10.11.12) ◄── Client connects to 9.10.11.12
+
+**Characteristics:**
+- One-to-one relationship
+- Client chooses which server
+- Most common IP model
+
+### Anycast IP
+
+**Definition:** Multiple servers **share the same IP address**
+
+**How it works:**
+- Multiple servers advertise the **same IP**
+- Client connects to the **same IP** regardless of server location
+- The client is **routed to the nearest server automatically**
+- **Routing is handled by the network**, not the client
+
+**Diagram:**
+
+    Server 1 (IP: 1.2.3.4) ◄─────┐
+                                 |
+    Server 2 (IP: 1.2.3.4) ◄─────┼── Client connects to 1.2.3.4
+                                 |    (routed to nearest server)
+    Server 3 (IP: 1.2.3.4) ◄─────┘
+
+**Characteristics:**
+- One-to-many relationship
+- Network chooses nearest server
+- Used by CDNs and Global Accelerator
+
+## Comparison
+
+| Aspect | Unicast IP | Anycast IP |
+|--------|-----------|-----------|
+| **IP per server** | Unique | Shared |
+| **Client knowledge** | Must know specific IP | Single IP for all |
+| **Routing decision** | Client chooses | Network chooses |
+| **Failover** | Manual (DNS/LB) | Automatic (BGP) |
+| **Use case** | Traditional apps | CDN, Global services |
+| **Examples** | Most web servers | CloudFront, Global Accelerator |
+
+---
+
+# AWS Global Accelerator — How It Works
+
+## Overview
+
+AWS Global Accelerator uses the **AWS internal network** to route traffic, providing **better performance** and **reliability** than the public internet.
+
+### Key Concept
+
+- **Two Anycast IPs** are created for your application
+- Anycast IPs send traffic to the **nearest Edge location**
+- Edge locations send traffic to your application over the **AWS private network**
+
+## Architecture Diagram
+
+**Global Accelerator Flow:**
+
+    User in America            User in Europe            User in Australia
+         |                           |                           |
+         | Connects to               | Connects to               | Connects to
+         | Anycast IP 1              | Anycast IP 1              | Anycast IP 1
+         | (1.2.3.4)                 | (1.2.3.4)                 | (1.2.3.4)
+         |                           |                           |
+         v                           v                           v
+    Edge Location              Edge Location              Edge Location
+    (America)                  (Europe)                   (Australia)
+         |                           |                           |
+         |                           |                           |
+         |<───────── AWS Private Network (Fast & Reliable) ──────>|
+         |                           |                           |
+         └───────────────────────────┴───────────────────────────┘
+                                     |
+                                     v
+                            ┌─────────────────┐
+                            |   Public ALB    |
+                            |   (India)       |
+                            └─────────────────┘
+
+**Step-by-Step Flow:**
+
+1. **Users connect to Anycast IP**
+   - All users use the same IP address (e.g., 1.2.3.4)
+   - Single DNS entry needed
+
+2. **Routed to nearest Edge location**
+   - User in America → American edge
+   - User in Europe → European edge
+   - User in Australia → Australian edge
+   - Routing happens at network layer (BGP)
+
+3. **Traffic travels over AWS private network**
+   - From edge location to application
+   - Uses AWS backbone (not public internet)
+   - Consistent, predictable performance
+
+4. **Reaches application**
+   - Public ALB in India
+   - EC2 instances
+   - Network Load Balancer
+   - Elastic IP
+
+## Benefits Over Public Internet
+
+| Aspect | Public Internet (Before) | Global Accelerator (After) |
+|--------|--------------------------|---------------------------|
+| **Hops** | 5+ hops (unpredictable) | 1 hop to edge, then AWS network |
+| **Latency** | 200-300ms | 50-100ms (60% reduction) |
+| **Packet Loss** | Variable (1-5%) | Near zero (<0.1%) |
+| **Reliability** | Unpredictable | Consistent |
+| **Path** | Uncontrolled | AWS backbone |
+| **Performance** | Variable | Optimized |
+
+## How Anycast IPs Work
+
+**Traditional (Unicast):**
+
+    DNS: app.example.com
+    ├─ US users: 1.2.3.4 (US ALB)
+    ├─ EU users: 5.6.7.8 (EU ALB)
+    └─ AU users: 9.10.11.12 (AU ALB)
+
+**With Global Accelerator (Anycast):**
+
+    DNS: app.example.com
+    └─ All users: 1.2.3.4 and 1.2.3.5 (Anycast IPs)
+       Network routes to nearest edge automatically
+
+---
+
+# AWS Global Accelerator — Features
+
+## 1. Works with Multiple Resource Types
+
+**Supported Resources:**
+
+- ✅ **Elastic IP** - Static IP for EC2
+- ✅ **EC2 instances** - Directly to compute
+- ✅ **Application Load Balancer (ALB)** - HTTP/HTTPS applications
+- ✅ **Network Load Balancer (NLB)** - TCP/UDP applications
+- ✅ **Public or Private** resources
+
+**Flexibility:**
+- Mix and match resource types
+- Multi-region failover
+- Blue/green deployments
+
+## 2. Consistent Performance
+
+### Intelligent Routing
+
+- Routes to the **lowest-latency endpoint**
+- **Fast regional failover** (<30 seconds)
+- Health check-based routing
+
+### No Client Cache Issues
+
+**Problem with DNS:**
+
+    User caches DNS: app.example.com → 1.2.3.4
+    ↓
+    Server 1.2.3.4 fails
+    ↓
+    DNS updated to 5.6.7.8
+    ↓
+    User still has cached 1.2.3.4 (FAILS)
+
+**Solution with Global Accelerator:**
+
+    User connects to Anycast IP: 1.2.3.4
+    ↓
+    Global Accelerator health checks fail for Endpoint 1
+    ↓
+    Global Accelerator routes to Endpoint 2
+    ↓
+    User still uses 1.2.3.4 (WORKS)
+
+**Benefits:**
+- Uses **internal AWS network**
+- **Static Anycast IPs** never change
+- No DNS propagation delay
+- No client-side caching issues
+
+## 3. Health Checks
+
+### Automatic Health Monitoring
+
+**How it works:**
+
+    Global Accelerator
+         ↓
+    Health Checks (every 30 seconds)
+         ↓
+    ┌──────────────┬───────────────┬──────────────┐
+    Endpoint 1     Endpoint 2      Endpoint 3
+    (Healthy)      (Unhealthy)     (Healthy)
+         ↓              ✗               ↓
+    Receives traffic              Receives traffic
+
+**Health Check Configuration:**
+- **Protocol:** TCP, HTTP, HTTPS
+- **Port:** Configurable
+- **Path:** For HTTP/HTTPS
+- **Interval:** 10 or 30 seconds
+- **Threshold:** Number of consecutive checks
+
+### Automatic Failover
+
+**Benefits:**
+- Enables **global reach** with automatic failover
+- Failover typically **under 1 minute** for unhealthy endpoints
+- **Useful for disaster recovery**
+- No manual intervention needed
+
+**Failover Scenario:**
+
+    Primary Endpoint (us-east-1): Healthy ✓
+    ↓
+    Receives 100% traffic
+    ↓
+    Primary fails (health check)
+    ↓
+    Automatic failover (<1 minute)
+    ↓
+    Secondary Endpoint (eu-west-1): Healthy ✓
+    ↓
+    Receives 100% traffic
+
+## 4. Security
+
+### Simplified Security
+
+**Only 2 external IPs need to be whitelisted**
+
+**Traditional (without Global Accelerator):**
+
+    Firewall rules:
+    - Allow: Range 1.0.0.0/8 (entire region)
+    - Allow: Range 2.0.0.0/8 (entire region)
+    - Allow: CloudFront IPs (hundreds)
+    - Allow: ...
+    Result: Complex, broad rules
+
+**With Global Accelerator:**
+
+    Firewall rules:
+    - Allow: 1.2.3.4 (Anycast IP 1)
+    - Allow: 1.2.3.5 (Anycast IP 2)
+    Result: Simple, specific rules
+
+### Built-in DDoS Protection
+
+**AWS Shield Integration:**
+- **AWS Shield Standard** (free) included
+- Protects against common DDoS attacks
+- Network and transport layer protection
+
+**How it works:**
+- Traffic enters at edge locations
+- DDoS mitigation at edge (not origin)
+- Only clean traffic reaches your application
+- Absorbs attacks before reaching origin
+
+**Protection Layers:**
+- Layer 3 (Network): IP floods
+- Layer 4 (Transport): SYN floods, UDP reflection
+- Layer 7 (Application): Can add WAF for advanced protection
+
+---
+
+# AWS Global Accelerator vs CloudFront
+
+## Shared Characteristics
+
+Both services share:
+- ✅ Use AWS **global infrastructure** and **Edge locations**
+- ✅ Include **DDoS protection** via AWS Shield
+- ✅ Leverage AWS **private backbone network**
+- ✅ Global reach and improved performance
+
+## CloudFront (Content Delivery Network)
+
+### What it is:
+A **CDN** that caches content at edge locations
+
+### How it works:
+- Content is **served from Edge locations**
+- Edge locations **cache content** for a TTL
+- Subsequent requests served from cache (no origin hit)
+
+### Best For:
+
+**Cacheable Content:**
+- ✅ Images, videos
+- ✅ Static websites
+- ✅ CSS, JavaScript files
+- ✅ Software downloads
+
+**Dynamic Content:**
+- ✅ API acceleration
+- ✅ Dynamic site delivery
+- ✅ Edge computing (Lambda@Edge)
+
+### Use Cases:
+- Static website hosting
+- Video streaming
+- Software distribution
+- API acceleration
+
+### Architecture:
+
+    User → CloudFront Edge → Cache Hit? → Serve from cache
+                           ↓
+                      Cache Miss? → Fetch from origin → Cache → Serve
+
+## Global Accelerator (Network Accelerator)
+
+### What it is:
+A **network optimization** service using Anycast IPs and AWS backbone
+
+### How it works:
+- Traffic **proxied** at Edge locations
+- All requests go to application (no caching)
+- Uses AWS network for optimal routing
+
+### Best For:
+
+**Non-HTTP Protocols:**
+- ✅ Gaming (UDP)
+- ✅ IoT (MQTT)
+- ✅ Voice over IP (VoIP)
+- ✅ Financial trading apps
+- ✅ TCP/UDP applications
+
+**HTTP Use Cases:**
+- ✅ Requiring static IP addresses
+- ✅ Deterministic, fast regional failover
+- ✅ Real-time data (no caching)
+- ✅ WebSocket applications
+
+### Use Cases:
+- Gaming applications
+- IoT device communication
+- Real-time applications
+- UDP-based applications
+- Applications requiring static IPs
+
+### Architecture:
+
+    User → Global Accelerator Edge → AWS Network → Application
+         (Anycast IP)              (always proxied)
+
+## Detailed Comparison Table
+
+| Feature | CloudFront | Global Accelerator |
+|---------|------------|-------------------|
+| **Type** | CDN (Content Delivery) | Network Accelerator |
+| **Primary Purpose** | Cache and serve content | Optimize network path |
+| **Caching** | Yes (main feature) | No (all requests proxied) |
+| **Protocols** | HTTP, HTTPS, WebSocket | TCP, UDP, HTTP, HTTPS |
+| **IP Addresses** | Dynamic (changes per edge) | Static Anycast IPs (2) |
+| **Origin Types** | S3, HTTP servers, MediaStore | ALB, NLB, EC2, Elastic IP |
+| **Failover** | Via health checks + DNS | Via health checks + Anycast |
+| **Failover Speed** | Minutes (DNS TTL) | Seconds (<30s) |
+| **Best for Content** | Static, cacheable | Dynamic, real-time |
+| **Best for Protocol** | HTTP/HTTPS | Any TCP/UDP |
+| **DDoS Protection** | AWS Shield | AWS Shield |
+| **Cost Model** | Pay per GB out + requests | Pay per hour + GB out |
+| **Static IP** | No | Yes (2 Anycast IPs) |
+| **Origin Access** | Can be private (OAC) | Must be reachable |
+| **Custom SSL** | Yes (free with ACM) | N/A (uses origin SSL) |
+
+## When to Use What?
+
+### Use CloudFront If:
+
+✅ You have **cacheable content** (images, videos, static files)
+✅ Your application is **HTTP/HTTPS** based
+✅ You want to **reduce origin load** via caching
+✅ You need **edge computing** (Lambda@Edge, CloudFront Functions)
+✅ You're serving a **website** or **API** with cacheable responses
+✅ You want to **stream video** or deliver software
+
+**Example Scenarios:**
+- E-commerce website with product images
+- Video streaming platform
+- Software download portal
+- Blog or news website
+- API with cacheable responses
+
+### Use Global Accelerator If:
+
+✅ Your application uses **non-HTTP protocols** (UDP, TCP)
+✅ You need **static IP addresses** (firewall whitelisting)
+✅ You need **fast failover** (<30 seconds)
+✅ Your content is **dynamic** and cannot be cached
+✅ You're building **gaming applications**
+✅ You have **IoT** applications
+✅ You need **real-time** data delivery (no caching)
+✅ You want **deterministic routing** (not DNS-based)
+
+**Example Scenarios:**
+- Real-time gaming applications
+- IoT device communication
+- VoIP applications
+- Financial trading platforms
+- Live video conferencing
+- Industrial control systems
+
+### Use Both If:
+
+✅ You have **static assets** (use CloudFront) AND **dynamic API** (use Global Accelerator)
+✅ You want **best of both** worlds
+
+**Example Architecture:**
+
+    Users
+     ├─► CloudFront (static.example.com) → S3 (images, CSS, JS)
+     └─► Global Accelerator (api.example.com) → ALB → EC2 (dynamic API)
+
+## Decision Tree
+Need to serve content?
+├─ Is content cacheable?
+│ ├─ Yes → Use CloudFront
+│ └─ No → Use Global Accelerator
+│
+├─ Is protocol HTTP/HTTPS?
+│ ├─ Yes
+│ │ ├─ Need static IPs? → Global Accelerator
+│ │ └─ Want caching? → CloudFront
+│ │
+│ └─ No (UDP, TCP, MQTT, etc.) → Global Accelerator
+│
+└─ Need sub-30-second failover? → Global Accelerator
+
+
+---
+
+# Summary: CloudFront & Global Accelerator
+
+## CloudFront Key Takeaways
+
+### Core Concepts:
+1. **CDN** that caches content at 200+ edge locations
+2. **Reduces latency** by serving content from nearest edge
+3. **Reduces origin load** by caching at edges
+4. **DDoS protection** via AWS Shield
+
+### Origins:
+- S3 bucket (with OAC for security)
+- ALB/NLB (can be in VPC or public)
+- EC2 instances (public)
+- Custom HTTP servers
+
+### Security:
+- **Origin Access Control (OAC)** for S3
+- **Geo Restriction** (allowlist/blocklist)
+- **Signed URLs/Cookies** for premium content
+- **AWS WAF** integration
+
+### Cost Control:
+- **Price Classes** (100, 200, All)
+- Choose regions based on user distribution
+- Lower cost in NA/Europe, higher in Asia
+
+### Cache Management:
+- **TTL** controls cache duration
+- **Cache Invalidation** for immediate updates
+- **Versioned URLs** better than invalidation
+- First 1,000 invalidation paths free/month
+
+## Global Accelerator Key Takeaways
+
+### Core Concepts:
+1. **Network accelerator** using Anycast IPs
+2. **Routes traffic over AWS backbone** (not public internet)
+3. **Static IPs** (2 Anycast IPs for the application)
+4. **Fast failover** (<30 seconds)
+
+### Use Cases:
+- **Non-HTTP protocols** (UDP, TCP, MQTT)
+- **Gaming applications**
+- **IoT** device communication
+- **VoIP** applications
+- HTTP requiring **static IPs**
+- Applications needing **deterministic failover**
+
+### Features:
+- **Intelligent routing** to lowest latency endpoint
+- **Health checks** with automatic failover
+- **DDoS protection** via AWS Shield
+- **No caching** (all requests proxied)
+
+### Endpoints:
+- Elastic IP
+- EC2 instances
+- ALB (public or internal)
+- NLB (public or internal)
+
+## Quick Reference Comparison
+
+| Need | CloudFront | Global Accelerator |
+|------|-----------|-------------------|
+| Cache static content | ✅ Yes | ❌ No |
+| HTTP/HTTPS | ✅ Yes | ✅ Yes |
+| TCP/UDP | ❌ No | ✅ Yes |
+| Static IP | ❌ No | ✅ Yes (2 Anycast) |
+| Fast failover (<30s) | ❌ No (DNS) | ✅ Yes |
+| Reduce origin load | ✅ Yes (caching) | ❌ No (proxying) |
+| Edge computing | ✅ Yes (Lambda@Edge) | ❌ No |
+| Cost for static files | Lower (caching) | Higher (proxying) |
+| Gaming/IoT | ❌ Not ideal | ✅ Perfect |
+| Website/API | ✅ Perfect | ⚠️ Use if no caching |
+
+## Exam Tips
+
+### CloudFront Questions Look For:
+- Keywords: **"cache"**, **"static content"**, **"video streaming"**, **"CDN"**
+- Scenarios: Website with images, video platform, software downloads
+- Security: OAC for S3, geo restriction, signed URLs
+- Cost: Price classes to reduce costs
+
+### Global Accelerator Questions Look For:
+- Keywords: **"static IP"**, **"UDP"**, **"gaming"**, **"failover"**, **"IoT"**
+- Scenarios: Gaming apps, VoIP, financial trading, real-time applications
+- Benefits: AWS backbone network, fast failover, consistent IPs
+- When CloudFront is NOT suitable
+
+### Common Exam Tricks:
+❌ "CloudFront can cache UDP traffic" - **FALSE** (use Global Accelerator)
+❌ "Global Accelerator caches content" - **FALSE** (it proxies)
+✅ "CloudFront uses edge locations" - **TRUE**
+✅ "Global Accelerator provides 2 static Anycast IPs" - **TRUE**
+✅ "Both provide DDoS protection" - **TRUE**
+
+---
+
+**📝 Note:** This comprehensive guide covers Amazon CloudFront and AWS Global Accelerator, essential services for the AWS Solutions Architect certification exam and real-world global application delivery.
