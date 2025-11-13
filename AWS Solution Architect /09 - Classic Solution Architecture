@@ -1,0 +1,799 @@
+# Introduction to Solutions Architecture
+
+## Overview
+
+- Highlights the **best part of the course**
+- Shows how technologies work together
+- Students should be fully comfortable with the material
+- Demonstrates progression through case studies:
+  - **WhatIsTheTime.Com**
+  - **MyClothes.Com**
+  - **MyWordPress.Com**
+  - Instantiating applications quickly
+  - Beanstalk
+
+---
+
+# Case Study 1: WhatIsTheTime.com
+
+## Initial Requirements
+
+- Stateless web app that returns the current time
+- No database required
+- Start small; accept some downtime
+- Scale vertically and horizontally with no downtime
+- Journey through solutions architecture approaches
+
+---
+
+## Architecture Evolution
+
+### Phase 1: Starting Simple - Single EC2 Instance
+
+User → Public EC2 (T2) → User
+
+- User asks "What time is it?"; EC2 responds with the time
+- **Elastic IP** provides a static public IP mapped to the EC2 instance
+- **Stateless:** each request is independent
+
+---
+
+### Phase 2: Vertical Scaling
+
+Multiple users → M3 Public EC2 instance
+
+- Upgrading **T2 to M3** (more CPU/RAM)
+- Elastic IP remains attached
+- **Limitation:** downtime during upgrade from M3 to M5
+
+---
+
+### Phase 3: Horizontal Scaling - Multiple EC2 Instances
+
+Multiple users → Multiple M5 Public EC2 instances
+
+- Multiple M5 instances handle requests independently
+- Each instance responds with its current time
+- Instances can be added or removed
+- **No Elastic IP**; instances use dynamic public IPs
+
+---
+
+### Phase 4: Horizontal Scaling with Route 53
+
+Users → Route 53 DNS → Multiple M5 Public EC2 instances
+
+- DNS query for `api.whatisthetime.com` with **A Record** (TTL: 1 hour)
+- Route 53 resolves the domain to multiple EC2 instance IPs
+- No Elastic IP needed; Route 53 handles IP mapping
+- Instances can be added/removed dynamically; one instance can be removed without affecting service
+
+---
+
+### Phase 5: Horizontal Scaling with Load Balancer (Single AZ)
+
+Users → Route 53 → ELB (Availability Zone 1) → Private M5 EC2 instances
+
+- Route 53 resolves `api.whatisthetime.com` via **Alias Record** to ELB
+- ELB with **health checks** in Availability Zone 1
+- **Private EC2 instances** (M5) in Availability Zone 1
+- Security groups restrict access; only ELB can reach EC2 instances
+- ELB distributes traffic and removes unhealthy instances
+
+---
+
+### Phase 6: Horizontal Scaling with Auto Scaling Group (Single AZ)
+
+Users → Route 53 → ELB → Auto Scaling Group → Private M5 EC2 instances (all in AZ 1)
+
+- **Auto Scaling Group** manages EC2 instances dynamically
+- Adds/removes instances based on demand
+- ELB distributes traffic to healthy instances
+- Single Availability Zone limitation remains
+
+---
+
+### Phase 7: Multi-AZ Architecture
+
+Users → Route 53 → Multi-AZ ELB → Auto Scaling Group → M5 instances across AZ 1, 2, 3
+
+- ELB configured for **multi-AZ** with health checks
+- Auto Scaling Group spans **Availability Zones 1, 2, and 3**
+- ELB distributes traffic across instances in all zones
+- **High availability:** if one AZ fails, others continue serving
+
+---
+
+### Phase 8: Multi-AZ with Reserved Capacity
+
+Users → Route 53 → Multi-AZ ELB → Auto Scaling Group → M5 instances in AZ 1 and AZ 2
+
+- Minimum **2 AZs** for high availability
+- **Reserved Instances** for minimum capacity to reduce costs
+- Auto Scaling Group adds **on-demand instances** above the minimum
+- **Cost optimization** while maintaining availability
+
+---
+
+## Key Concepts Covered
+
+### Public vs Private IP and EC2 Instances
+
+- **Public IPs** enable internet access; **private IPs** are for internal VPC communication
+- EC2 instances can have both; public IPs are dynamic by default unless using Elastic IP
+
+### Elastic IP vs Route 53 vs Load Balancers
+
+| Service | Purpose |
+|---------|---------|
+| **Elastic IP** | Static public IP for a single instance; can be remapped to another instance |
+| **Route 53** | DNS service resolving domain names to IPs; supports A records and Alias records |
+| **Load Balancers (ELB)** | Distribute traffic across multiple instances; provide health checks and high availability |
+
+### Route 53 TTL, A Records and Alias Records
+
+- **TTL (Time To Live):** how long DNS resolvers cache the record (e.g., 1 hour)
+- **A Records:** map domain names to IPv4 addresses
+- **Alias Records:** Route 53 feature mapping domain names to AWS resources (e.g., ELB, CloudFront); automatically track resource IP changes and can be used for root domains
+
+### Maintaining EC2 Instances Manually vs Auto Scaling Groups
+
+| Approach | Description |
+|----------|-------------|
+| **Manual** | Launch, configure, and manage instances individually; suitable for small, static workloads |
+| **Auto Scaling Groups** | Automatically adjust instance count based on demand; replace unhealthy instances; scale in/out dynamically |
+
+### Multi-AZ to Survive Disasters
+
+- Deploying across **multiple Availability Zones** provides fault isolation
+- If one AZ fails, the application continues in other AZs
+- Essential for high availability and disaster recovery
+
+### ELB Health Checks
+
+- ELB periodically checks registered instances
+- **Unhealthy instances** are removed from rotation
+- Traffic resumes when instances become healthy again
+
+### Security Group Rules
+
+- Virtual firewalls controlling inbound/outbound traffic
+- Restrict access to EC2 instances (e.g., only ELB can reach private instances)
+- Rules based on protocol, port, and source/destination
+
+### Reservation of Capacity for Cost Savings
+
+- **Reserved Instances** offer discounts for 1 or 3-year commitments
+- Use for steady-state, predictable workloads (minimum capacity)
+- **Combine with Auto Scaling:** reserve baseline capacity, use on-demand for variable load above baseline
+
+---
+
+# Case Study 2: Stateful Web App - MyClothes.com
+
+## Requirements
+
+- E-commerce platform for online clothing purchases
+- Shopping cart functionality
+- Handle hundreds of concurrent users
+- Horizontal scalability
+- Keep the web application **stateless**
+- Users should **not lose their shopping cart**
+- User details (address, etc.) stored in a database
+
+## Challenge
+
+Balance stateless design with stateful user data (shopping cart)
+
+---
+
+## Basic Architecture — Multi-AZ Deployment
+
+### Architecture Flow
+
+User → Route 53 (DNS) → Multi-AZ Load Balancer (ELB/ALB) → Auto Scaling Group → M5 instances in AZ1, AZ2, AZ3
+
+- Load Balancer distributes traffic to an Auto Scaling Group
+- Auto Scaling Group spans three Availability Zones (AZ1, AZ2, AZ3)
+- Each AZ contains M5 EC2 instances hosting the application
+- Load Balancer distributes requests across M5 instances in different AZs
+
+### Benefits
+
+- ✅ High availability across multiple AZs
+- ✅ Auto-scaling adjusts capacity
+- ✅ Fault tolerance (app continues if one AZ fails)
+
+---
+
+## ELB Stickiness (Session Affinity)
+
+### Mechanism
+
+User → Route 53 → ELB with stickiness enabled → Same M5 instance (AZ1)
+
+- ELB routes all requests from a user session to the **same M5 instance**
+- Example: All requests from a user go to the M5 instance in Availability Zone 1
+
+### How It Works
+
+- ELB uses **session cookies** or other identifiers
+- First request establishes affinity to a backend instance
+- Subsequent requests in the session go to the same instance
+
+### Benefits
+
+- ✅ Session state remains on a single server
+- ✅ Shopping cart data persists during the session
+
+### Limitations
+
+- ❌ If an instance fails, the session is lost
+- ❌ Uneven load distribution if sessions vary in duration
+- ❌ Not truly stateless
+
+---
+
+## User Cookies Approach
+
+### Architecture
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 instances in AZ1, AZ2, AZ3)
+
+Shopping cart content is sent in **web cookies** between user and application
+
+### Characteristics
+
+- ✅ **Stateless:** servers don't store session data
+- ❌ HTTP requests are heavier (cart data in every request)
+- ❌ Security risk: cookies can be altered
+- ⚠️ Cookies must be validated on the server
+- ⚠️ Cookies must be less than **4KB** (limits cart size)
+
+### Use Cases
+
+- Small cart data
+- Non-sensitive data
+- Simple implementations
+
+---
+
+## Server Session with External Storage
+
+### Architecture Flow
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 instances in AZ1, AZ2, AZ3) → External storage
+
+### Session Management
+
+- Server generates a unique **session_id** and sends it to the user in a web cookie
+- Subsequent requests include the **session_id** cookie
+- Session data is stored externally, not on the M5 instances
+
+### Storage Options
+
+- **ElastiCache:** high-performance in-memory cache for session data
+- **DynamoDB:** alternative NoSQL database for session storage
+
+### Benefits
+
+- ✅ **Stateless application servers** (any instance can handle any request)
+- ✅ Session data persists across server restarts
+- ✅ Horizontal scalability (add/remove instances without losing sessions)
+- ✅ Centralized session management
+
+### How It Works
+
+1. User logs in or starts a session → server generates **session_id**
+2. **session_id** sent to browser in cookie
+3. Session data (cart, preferences) stored in ElastiCache/DynamoDB with **session_id** as key
+4. Subsequent requests include **session_id** → server retrieves session data from external store
+5. Any M5 instance can retrieve and update session data
+
+---
+
+## Storing User Data in Database
+
+### Architecture
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 instances in AZ1, AZ2, AZ3) → ElastiCache + RDS
+
+### Data Layer
+
+- **ElastiCache:** caching layer for frequently accessed data
+- **RDS:** primary database for persistent user data (addresses, names, profiles, orders)
+
+### Data Flow
+
+- User requests → M5 instances
+- M5 instances query **ElastiCache** for cached data
+- Cache misses query **RDS**
+- Write operations go to **RDS**
+- Frequently accessed data cached in **ElastiCache**
+
+### Benefits
+
+- ✅ Persistent user data in RDS
+- ✅ Fast reads via ElastiCache
+- ✅ Separation of concerns (cache vs. database)
+
+---
+
+## Scaling Reads with Read Replicas
+
+### Architecture
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 instances in AZ1, AZ2, AZ3) → ElastiCache + RDS Master + RDS Read Replicas
+
+### Read/Write Flow
+
+- **Write operations:** M5 instances → RDS Master
+- **Read operations:** M5 instances → ElastiCache (cache hit) or RDS Read Replicas (cache miss or distributed reads)
+- **Replication:** master asynchronously replicates to read replicas
+
+### Benefits
+
+- ✅ Offloads read traffic from master
+- ✅ Scales read capacity
+- ✅ Better performance for read-heavy workloads
+- ✅ Reduces master bottleneck
+
+---
+
+## Scaling Reads (Alternative) — Lazy Loading
+
+### Architecture
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 instances in AZ1, AZ2, AZ3) → ElastiCache + RDS
+
+### Lazy Loading Flow
+
+1. User request → M5 instance
+2. M5 checks **ElastiCache**
+3. **Cache hit:** read from cache and return
+4. **Cache miss:** read from RDS, write to ElastiCache, then return
+5. Writes go directly to **RDS**
+
+### How Lazy Loading Works
+
+- Cache is populated **on demand** (only when data is requested)
+- First request fetches from RDS and caches
+- Subsequent requests read from cache
+- Reduces database load for frequently accessed data
+
+### Benefits
+
+- ✅ Automatic cache population
+- ✅ Efficient use of cache (only stores requested data)
+- ✅ Reduces RDS load for popular items
+- ✅ Improves response times for repeated queries
+
+---
+
+## Multi-AZ — Survive Disasters
+
+### Architecture
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 in AZ1, AZ2, AZ3) → ElastiCache (Multi-AZ) + RDS (Multi-AZ)
+
+### All Critical Components Deployed in Multi-AZ
+
+- **Load Balancer:** Multi-AZ
+- **EC2 instances:** across three AZs
+- **ElastiCache:** Multi-AZ configuration
+- **RDS:** Multi-AZ with primary and standby replica
+
+### Disaster Recovery
+
+- If one AZ fails, the application continues using other AZs
+- **RDS Multi-AZ:** synchronous replication to standby; automatic failover if primary fails
+- **ElastiCache Multi-AZ:** cache remains available across AZs
+- **Load Balancer:** distributes traffic across healthy AZs
+
+### Benefits
+
+- ✅ High availability and fault tolerance
+- ✅ Automatic failover for database
+- ✅ No single point of failure
+- ✅ Business continuity during AZ outages
+
+---
+
+## Security Groups Configuration
+
+### Architecture
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 in AZ1, AZ2, AZ3) → ElastiCache + RDS
+
+### Security Group Rules
+
+| Component | Inbound Access | Ports |
+|-----------|---------------|-------|
+| **Load Balancer SG** | Open HTTP/HTTPS to `0.0.0.0/0` (internet) | 80/443 |
+| **EC2 SG** | Restrict to Load Balancer SG only | App port |
+| **ElastiCache SG** | Restrict to EC2 SG only | Cache port |
+| **RDS SG** | Restrict to EC2 SG only | 3306/5432 |
+
+### Security Benefits
+
+- ✅ **Defense in depth** (layered security)
+- ✅ No direct internet access to EC2, ElastiCache, or RDS
+- ✅ **Principle of least privilege**
+- ✅ Security groups reference each other (dynamic, not IP-based)
+
+---
+
+## Summary — 3-Tier Architecture Concepts
+
+### Key Concepts
+
+- **ELB sticky sessions:** route user requests to the same backend instance for session persistence
+- **Web clients for storing cookies:** shift session state to client-side cookies to keep servers stateless
+- **ElastiCache:**
+  - For storing sessions (alternative: DynamoDB) — centralized session storage for stateless applications
+  - For caching data from RDS — improve performance by caching frequently accessed database data
+- **Multi-AZ** — high availability across multiple availability zones
+- **RDS:**
+  - For storing user data — persistent storage for user profiles, addresses, and transaction data
+  - Read replicas for scaling reads — offload read traffic to replica instances
+  - Multi-AZ for disaster recovery — automatic failover with synchronous replication
+- **Tight security with security groups referencing each other:** layered security using security group references instead of IP addresses for dynamic and secure access control
+
+### Overall Architecture Pattern
+
+- **Presentation tier:** Load Balancer
+- **Application tier:** EC2 instances (stateless)
+- **Data tier:** ElastiCache (sessions/cache) + RDS (persistent data)
+- All components deployed across **multiple availability zones** for high availability
+- Security groups enforce network isolation between tiers
+
+---
+
+# Case Study 3: Stateful Web App - MyWordPress.com
+
+## Goals
+
+- **Scalable WordPress site:** handle growth with auto-scaling and load balancing
+- **Picture uploads and display:** handle uploads, storage, and retrieval, and display media correctly
+- **MySQL data storage:** store user data and blog content in MySQL for persistence and queries
+
+---
+
+## Architecture: RDS Layer (High Availability)
+
+### Architecture Flow
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 in AZ1, AZ2, AZ3) → RDS Multi-AZ
+
+- **User → Route 53:** DNS resolution for MyWordPress.com
+- **Route 53 → Multi-AZ Load Balancer:** routes to the app entry point
+- **Load Balancer → Auto Scaling Group:** distributes traffic across web servers
+- Auto Scaling Group spans three Availability Zones (AZ1, AZ2, AZ3) with M5 instances in each
+- **M5 instances → RDS Multi-AZ:** all web servers connect to a Multi-AZ RDS instance (primary + standby) for high availability and failover
+
+### Benefits
+
+- ✅ Multi-AZ load balancer and app servers: resilience against AZ failures
+- ✅ Auto Scaling: adjusts capacity based on demand
+- ✅ RDS Multi-AZ: automatic failover if the primary fails
+
+---
+
+## Architecture: Aurora MySQL with Read Replicas
+
+### Architecture Flow
+
+User → Route 53 → Multi-AZ Load Balancer → Auto Scaling Group (M5 in AZ1, AZ2, AZ3) → Aurora MySQL Multi-AZ with Read Replicas
+
+- **User → Route 53:** DNS resolution
+- **Route 53 → Multi-AZ Load Balancer:** entry point
+- **Load Balancer → Auto Scaling Group:** distributes across M5 instances in AZ1, AZ2, AZ3
+- **M5 instances → Aurora MySQL Multi-AZ with Read Replicas:** all instances connect to Aurora for reads/writes
+
+### Aurora Advantages
+
+- ✅ **Multi-AZ:** automatic failover
+- ✅ **Read replicas (up to 15):** scale reads and improve performance
+- ✅ **Shared storage:** fast replication and low-latency replicas
+
+---
+
+## Storing Images with EBS (Single Instance)
+
+### Architecture Flow
+
+User → Route 53 → M5 instance (AZ1) → Amazon EBS Volume
+
+- User sends image → Multi-AZ application layer: receives upload
+- Application layer → M5 instance in Availability Zone 1: processes upload
+- **M5 instance → Amazon EBS Volume:** image stored on the attached EBS volume
+
+### Characteristics
+
+- EBS is **block storage** attached to a **single EC2 instance** in the same AZ
+- Data persists independently of the instance lifecycle
+- Suitable for **single-instance apps** where data is tied to one server
+
+---
+
+## Storing Images with EBS (Multi-AZ)
+
+### Architecture Flow
+
+User → Route 53 → Multi-AZ Load Balancer → M5 instances in AZ1 & AZ2 (each with separate EBS)
+
+- User sends image → Multi-AZ Load Balancer: receives upload
+- Load Balancer distributes to:
+  - Availability Zone 1: M5 instance → EBS Volume
+  - Availability Zone 2: M5 instance → EBS Volume
+
+### Limitations
+
+- ❌ Each instance has its own EBS volume; **data is not shared**
+- ❌ Uploads stored on one instance are **not accessible from others**
+- ❌ Not ideal for distributed apps needing shared storage
+
+---
+
+## Storing Images with EFS (Distributed Application)
+
+### Architecture Flow
+
+User → Route 53 → Multi-AZ Load Balancer → M5 instances in AZ1 & AZ2 → ENI → EFS (shared)
+
+- User sends image → Multi-AZ Load Balancer: receives upload
+- Load Balancer distributes to:
+  - Availability Zone 1: M5 instance → ENI (Elastic Network Interface) → EFS
+  - Availability Zone 2: M5 instance → ENI → EFS
+
+### EFS Benefits
+
+- ✅ **Shared file system** accessible by multiple instances across AZs
+- ✅ All instances see the same files
+- ✅ Suitable for **distributed apps** requiring shared storage
+- ✅ Scales automatically; no capacity provisioning
+
+---
+
+## Summary: Aurora, EBS, and EFS
+
+### Aurora Database
+
+**Easy Multi-AZ and read replicas:** managed setup, automatic failover, and up to 15 read replicas for read scaling
+
+### EBS Storage (Single Instance)
+
+- Block storage attached to **one EC2 instance** in the same AZ
+- Use for single-instance apps where data is tied to one server
+- Data persists independently of the instance lifecycle
+
+### EFS Storage (Distributed Application)
+
+- **Shared file system** accessible by multiple EC2 instances across AZs
+- Use for distributed apps requiring shared file access
+- Automatically scales; supports NFS protocol
+
+---
+
+# Instantiating Applications Quickly
+
+## Challenges
+
+### Time-Consuming Tasks
+
+- **Installing applications:** software setup and dependencies
+- **Inserting initial (or recovery) data:** seeding or restoring data
+- **Configuring everything:** network, security, and application settings
+- **Launching the application:** making it operational
+
+### Solution
+
+Leverage cloud services to speed up deployment and provisioning
+
+---
+
+## Methods
+
+### EC2 Instances
+
+- **Golden AMI:** pre-configured AMI with apps and dependencies installed; launch instances ready to use
+- **Bootstrap using User Data:** scripts executed at launch for dynamic configuration
+- **Hybrid approach (Elastic Beanstalk):** combine Golden AMI with User Data for core apps plus dynamic config
+
+### RDS Databases
+
+- **Restore from snapshot:** restore from a point-in-time backup to get schema and data immediately
+
+### EBS Volumes
+
+- **Restore from snapshot:** restore EBS volumes from snapshots to get formatted volumes with data instantly
+
+---
+
+## Typical Architecture: Web App 3-Tier
+
+### Architecture Tiers
+
+**Public Subnet (Presentation Tier)**
+- Route 53: DNS resolution for user requests
+- ELB (Elastic Load Balancer) Multi-AZ: distributes traffic across app servers
+
+**Private Subnet (Application Tier)**
+- Auto Scaling Group: manages EC2 instances (M5) across AZ1, AZ2, AZ3
+- M5 instances: run application logic; receive traffic from ELB
+
+**Data Subnet (Data Tier)**
+- ElastiCache: stores/retrieves session data and cached data
+- Amazon RDS: read/write persistent data
+
+### Data Flow
+
+User requests → Route 53 → ELB → M5 instances → ElastiCache (sessions/cache) + RDS (persistent data)
+
+---
+
+# Developer Problems on AWS
+
+## Challenges
+
+- **Managing infrastructure:** setup, maintenance, networking, storage
+- **Deploying code:** building, packaging, uploading, configuring
+- **Configuring databases, load balancers, etc.:** tuning services and parameters
+- **Scaling concerns:** auto-scaling, monitoring, horizontal scalability
+
+## Observations
+
+- Most web apps use **ALB + ASG** (Application Load Balancer + Auto Scaling Group)
+- Developers want to focus on **code**, not infrastructure
+- Need **consistency** across applications and environments (dev, staging, production)
+
+---
+
+# Elastic Beanstalk
+
+## Overview
+
+### Developer-Centric Deployment
+
+- Simplifies deployment on AWS; developers focus on code
+- Uses EC2, ASG, ELB, RDS, etc., behind the scenes
+
+### Managed Service
+
+Automatically handles:
+- ✅ Capacity provisioning
+- ✅ Load balancing
+- ✅ Scaling
+- ✅ Application health monitoring
+- ✅ Instance configuration
+
+**Developers are responsible for application code only.**
+
+### Control and Pricing
+
+- Full control over configuration remains available
+- Beanstalk is **free**; pay only for underlying resources (EC2, RDS, S3, etc.)
+
+---
+
+## Elastic Beanstalk - Components
+
+### Core Components
+
+- **Application:** collection of environments, versions, and configurations
+- **Application Version:** specific iteration/release of application code
+- **Environment:** AWS resources provisioned to run one application version at a time
+
+### Environment Tiers
+
+- **Web Server Environment Tier:** for web apps serving HTTP requests
+- **Worker Environment Tier:** for background/asynchronous processing tasks
+- **Multiple environments per application:** dev, test, prod
+
+### Workflow
+
+1. **Create Application:** establish container for code and environments
+2. **Upload Version:** upload specific application code version
+3. **Launch Environment:** provision AWS resources and deploy the version
+4. **Manage Environment:** monitor health, scale, and apply configurations
+5. **Update Version:** upload new version and deploy to existing environment
+
+---
+
+## Elastic Beanstalk - Supported Platforms
+
+### Languages and Frameworks
+
+- Go
+- Java SE
+- Java with Tomcat
+- .NET Core on Linux
+- .NET on Windows Server
+- Node.js
+- PHP
+- Python
+- Ruby
+
+### Container Platforms
+
+- **Packer Builder:** custom AMIs created with Packer
+- **Single Container Docker:** single Docker container deployment
+- **Multi-container Docker:** multiple interconnected Docker containers
+- **Preconfigured Docker:** pre-built Docker environments
+
+---
+
+## Elastic Beanstalk - Web Server Tier and Worker Tier
+
+### Web Server Tier
+
+Web Environment: myapp.us-east-1.elasticbeanstalk.com → ELB → Auto Scaling Group (AZ1, AZ2) → EC2 Web Servers
+
+- **Web Environment:** accessible via domain (e.g., `myapp.us-east-1.elasticbeanstalk.com`)
+- **ELB:** distributes incoming HTTP traffic
+- **Auto Scaling Group:** manages EC2 instances across AZ1 and AZ2
+- **Security Groups:** define network rules for instances
+- **EC2 Instances (Web Server):** serve user requests directly
+- **Function:** handle HTTP requests and serve web content
+
+### Worker Tier
+
+Worker Environment → SQS Queue → Auto Scaling Group (AZ1, AZ2) → EC2 Workers
+
+- **Worker Environment:** background processing environment
+- **SQS Queue:** receives tasks/messages for processing
+- **Auto Scaling Group:** scales worker instances based on SQS queue depth
+- **EC2 Instances (Worker):** pull messages from SQS and process tasks
+- **Availability Zones:** distributed across AZ1 and AZ2
+- **Function:** process long-running, resource-intensive, or asynchronous tasks
+- **Scaling:** based on number of SQS messages
+- **Integration:** can receive messages from Web Server Tier applications
+
+---
+
+## Elastic Beanstalk - Deployment Modes
+
+### Single Instance Deployment Mode
+
+**Great for dev environments**
+
+Architecture:
+- Single EC2 instance in Availability Zone 1
+- **Elastic IP** points directly to the instance
+- Connected to **RDS Master** (single database instance)
+
+Characteristics:
+- ✅ Cost-effective and simple
+- ❌ No high availability; downtime if instance or AZ fails
+- ⚠️ Suitable for development/testing only
+
+### High Availability with Load Balancer Deployment Mode
+
+**Great for production environments**
+
+Architecture:
+- **ALB (Application Load Balancer)** distributes traffic
+- **Auto Scaling Group** manages EC2 instances
+- EC2 instances distributed across **Availability Zone 1** and **Availability Zone 2**
+- **RDS Master** in AZ1, **RDS Standby** in AZ2 (automatic failover)
+
+Characteristics:
+- ✅ High availability and fault tolerance
+- ✅ Horizontal scalability
+- ✅ Can survive instance or AZ failures
+- ✅ Suitable for production workloads
+
+---
+
+## Summary
+
+| Case Study | Key Technologies | Architecture Pattern |
+|------------|------------------|---------------------|
+| **WhatIsTheTime.com** | EC2, ELB, Route 53, Auto Scaling | Stateless web app, multi-AZ, auto-scaling |
+| **MyClothes.com** | ELB, EC2, ElastiCache, RDS, Security Groups | Stateful 3-tier, session management, multi-AZ |
+| **MyWordPress.com** | ELB, EC2, Aurora/RDS, EFS/EBS | Content management, shared storage, multi-AZ |
+| **Elastic Beanstalk** | All managed services | PaaS for rapid deployment, dev-friendly |
+
+---
+
+**📝 Note:** This content demonstrates AWS Solutions Architecture best practices and patterns for the AWS Solutions Architect certification exam.
