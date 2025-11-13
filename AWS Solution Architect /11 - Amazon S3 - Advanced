@@ -1,0 +1,421 @@
+# Amazon S3 – Advanced Features
+
+## Moving between Storage Classes
+
+### Overview
+
+- Objects in S3 can be **moved between different storage classes**
+- Move **rarely accessed data** to Standard-IA to reduce cost
+- Move **long-term archive data** to Glacier / Glacier Deep Archive
+- Use **Lifecycle Rules** to automate object movement
+
+### Diagram Explanation
+
+The diagram shows objects starting in **Standard storage** and automatically transitioning down to cheaper storage classes based on access frequency:
+
+Standard → Standard-IA → Intelligent Tiering → One Zone IA → Glacier Instant Retrieval → Glacier Flexible Retrieval → Glacier Deep Archive
+
+---
+
+## Amazon S3 – Lifecycle Rules
+
+### What are Lifecycle Rules?
+
+- **Transition actions** automatically move objects to a cheaper class after time (ex: move to IA after 60 days)
+- **Expiration actions** delete objects after a set time (ex: delete after 365 days)
+- Lifecycle rules can **delete old versions of objects** (if versioning enabled)
+- Lifecycle rules can **delete incomplete multipart uploads**
+- Rules can apply to **specific prefixes** (folder-like structure)
+- Rules can apply based on **object tags** (ex: Finance tag)
+
+---
+
+## Lifecycle Rules – Scenario 1
+
+### Use Case: Application with Images and Thumbnails
+
+- Store **original images** in Standard, then transition to Glacier after 60 days
+- Store **thumbnails** in One-Zone IA, then delete them after 60 days
+
+### Diagram Explanation
+
+The diagram shows storing frequently accessed images in Standard initially and migrating them later, while thumbnails are stored cheaply and deleted after they are no longer needed.
+
+---
+
+## Lifecycle Rules – Scenario 2
+
+### Use Case: Version Management and Archival
+
+- Enable **Versioning** so deleted items can be recovered using delete markers
+- Transition **non-current versions** to Standard-IA first
+- Transition **older non-current versions** to Glacier Deep Archive for cheapest long-term storage
+
+### Diagram Explanation
+
+Shows versioning creating multiple versions; lifecycle rules gradually move old versions into cheaper archive storage.
+
+---
+
+## Amazon S3 Analytics – Storage Class Analysis
+
+### Overview
+
+- Helps decide **when to transition objects** to lower cost storage
+- Gives **recommendations** for Standard → Standard-IA transitions
+- ❌ Does **not support** One-Zone IA or Glacier analysis
+- Reports **update daily** and take **24–48 hours** to populate
+- Useful for **designing lifecycle rules**
+
+### Diagram Explanation
+
+S3 Analytics generates a **CSV report** indicating object age and current storage class to help with decision-making.
+
+---
+
+## S3 – Requester Pays
+
+### How it Works
+
+- **Normally:** bucket owner pays for storage and data transfer
+- **With Requester Pays:** the requester pays download costs instead
+- Useful for **sharing large datasets** across accounts
+- Requester must be **authenticated** (no anonymous access)
+
+### Diagram Explanation
+
+**Top diagram:** Standard bucket (owner pays for storage + network cost)
+
+**Bottom diagram:** Requester pays bucket (owner pays storage, requester pays download cost)
+
+---
+
+# S3 Event Notifications
+
+## Overview
+
+S3 can detect events (like object upload/delete) and send notifications to other AWS services.
+
+### Key Features
+
+- S3 triggers events for actions like object **created**, **removed**, **restored**, or **replicated**
+- You can **filter events by object name** (e.g., only `.jpg`)
+- **Example use case:** auto-generate thumbnails when an image is uploaded
+- You can configure **multiple S3 event rules** per bucket
+- Event delivery is **fast (seconds)**, but occasionally can take a bit longer
+
+### Diagram Explanation
+
+S3 Bucket → Event Notifications → SNS / SQS / Lambda
+
+S3 sends event notifications to SNS, SQS, or Lambda depending on your configuration.
+
+---
+
+## S3 Event Notifications – IAM Permissions
+
+### Required Configuration
+
+- To allow S3 to trigger SNS, SQS, or Lambda, those resources must **allow S3 via resource policies**
+- SNS, SQS, and Lambda must **explicitly allow S3** to send messages/invoke them
+
+### Diagram Explanation
+
+Each destination (SNS/SQS/Lambda) has a **policy allowing Principal: s3.amazonaws.com** so S3 can send events to that service.
+
+---
+
+# S3 Performance
+
+## S3 – Baseline Performance
+
+### Performance Characteristics
+
+- S3 can **scale automatically**, and request speeds depend on object prefixes
+- S3 scales automatically to support **high request rates**
+- You get at least **3,500 write requests** or **5,500 read requests per second per prefix**
+- **No limit to prefixes**—more prefixes = more parallel performance
+- **Distributing objects across prefixes** increases throughput
+
+### Diagram Explanation
+
+Shows how different folder paths (prefixes) allow S3 to parallelize requests (more prefixes = more throughput).
+
+### Example
+
+bucket/prefix1/ → 3,500 PUT/sec + 5,500 GET/sec
+bucket/prefix2/ → 3,500 PUT/sec + 5,500 GET/sec
+bucket/prefix3/ → 3,500 PUT/sec + 5,500 GET/sec
+bucket/prefix4/ → 3,500 PUT/sec + 5,500 GET/sec
+
+**Total = 14,000 PUT/sec + 22,000 GET/sec**
+
+---
+
+## S3 Performance – Upload Optimization
+
+### Multi-Part Upload
+
+- Splits a large file and uploads parts **in parallel**
+- **Mandatory for files >5GB**
+- Recommended for files **>100MB**
+- Improves upload speed and reliability
+
+### S3 Transfer Acceleration
+
+- Sends data to the **nearest AWS edge location** to speed global uploads
+- Uses AWS's private network to transfer from edge to S3 bucket
+- Compatible with multi-part upload
+
+### Diagram Explanation
+
+**Left:** A file is divided into parts and uploaded concurrently (Multi-Part Upload)
+
+**Right:** File travels from user → edge location → S3 bucket (Transfer Acceleration - faster transfer)
+
+---
+
+## S3 Performance – Byte-Range Fetches
+
+### Overview
+
+You can request **specific byte ranges** of a file to speed downloads or fetch partial file data.
+
+### Benefits
+
+- **Parallel byte-range requests** speed up downloads
+- Useful to read only a **portion of a file** (e.g., first few bytes as header)
+- Improves **resilience**: if one part fails, only that part retries
+
+### Diagram Explanation
+
+**Left:** Multiple byte ranges downloaded in parallel
+
+Byte range 0-50MB → Part 1
+Byte range 50-100MB → Part 2
+Byte range 100-150MB → Part 3
+
+**Right:** Only the file header portion is fetched
+
+GET /my-file.bin with header: Range: bytes=0-1023
+
+---
+
+# S3 Batch Operations
+
+## Overview
+
+Allows **bulk actions on millions of existing S3 objects** in a single job.
+
+### What You Can Do
+
+- Perform bulk actions like:
+  - Metadata updates
+  - Copy objects
+  - Encryption changes
+  - Restore from Glacier
+  - Object tagging
+  - Invoke Lambda function on each object
+
+### How It Works
+
+- Jobs contain: **object list + action + parameters**
+- Batch Operations manages **retries, progress, and notifications**
+- **S3 Inventory + Athena** can be used to generate and filter object lists
+
+### Diagram Explanation
+
+S3 Inventory → Generate object list → Athena (filter objects) → S3 Batch Operations → Perform bulk updates
+
+---
+
+# S3 Storage Lens
+
+## Overview
+
+Helps **understand, analyze, and optimize storage** across AWS accounts and organization.
+
+### Key Features
+
+- ✅ Detect anomalies
+- ✅ Reduce cost
+- ✅ Apply best data protection practices
+- Aggregates metrics at **organization/account/region/bucket/prefix level**
+- Provides **default dashboard** or allows **custom dashboards**
+- Metrics can be **exported daily to S3** in CSV or Parquet format
+
+### Diagram Explanation
+
+**Flow:**
+1. Configure Storage Lens for Organization → Accounts → Regions → Buckets
+2. Storage Lens aggregates storage data
+3. Dashboard analyzes & visualizes storage insights
+4. Output helps optimize cost and security (summary insights, data protection, cost efficiency)
+
+---
+
+## Storage Lens – Default Dashboard
+
+### Features
+
+- The dashboard shows **summarized insights** and **trending metrics**
+- Displays **multi-region** and **multi-account data** by default
+- **Pre-configured automatically** by Amazon S3
+- Dashboard **cannot be deleted** but can be **disabled**
+
+### Diagram Explanation
+
+- **Left image:** Dashboard filters (accounts, regions, buckets)
+- **Right image:** Summary metrics (usage, growth trend, activity)
+
+---
+
+## Storage Lens – Metrics Categories
+
+### Summary Metrics
+
+**Purpose:** Gives overall insights of usage (e.g., storage bytes, object count)
+
+**Use case:** Identify fastest growing or unused buckets
+
+### Cost Optimization Metrics
+
+**Purpose:** Helps reduce storage cost using usage patterns
+
+**Use case:** Detect incomplete multipart uploads / move objects to cheaper storage class
+
+---
+
+## Storage Lens – Data Protection & Access Metrics
+
+### Data Protection Metrics
+
+**Purpose:** Shows protection features like versioning, MFA delete, SSE-KMS
+
+**Use case:** Identify buckets not following backup/security best practices
+
+### Access Management Metrics
+
+**Purpose:** Shows S3 bucket ownership and access control configuration
+
+**Use case:** Identify buckets not following correct ownership settings
+
+### Event Metrics
+
+**Purpose:** Shows if S3 Event Notifications are configured
+
+**Use case:** Identify buckets triggering events (like Lambda/SQS)
+
+---
+
+## Storage Lens – Performance & Activity Metrics
+
+### Performance Metrics
+
+**Purpose:** Shows if S3 Transfer Acceleration is enabled
+
+**Use case:** Optimize upload/download performance for global users
+
+### Activity Metrics
+
+**Purpose:** Tracks how storage is accessed (GET/PUT/LIST/DELETE requests)
+
+**Use case:** Understand access patterns and optimize accordingly
+
+### Detailed Status Code Metrics
+
+**Purpose:** Shows HTTP response codes (200 OK, 403, 404, etc.)
+
+**Use case:** Identify access issues and errors
+
+---
+
+## Storage Lens – Free vs. Paid (Advanced)
+
+### Free Metrics
+
+- **28 basic metrics** available automatically
+- **Retention:** 14 days
+- ✅ Automatically enabled
+- ❌ No CloudWatch integration
+- ❌ No prefix-level metrics
+
+### Advanced Metrics (Paid)
+
+- Adds more detailed **activity, cost, status code & data protection metrics**
+- **CloudWatch Publishing:** Sends advanced metrics to CloudWatch
+- **Prefix Aggregation:** Shows metrics at prefix level (folder-level insight)
+- **Retention:** Available for **15 months**
+- 💰 Additional cost applies
+
+### Diagram Explanation
+
+UI screenshot shows selecting Free vs. Advanced metrics and enabling CloudWatch & prefix aggregation.
+
+---
+
+## Summary Table: S3 Advanced Features
+
+| Feature | Purpose | Use Case |
+|---------|---------|----------|
+| **Lifecycle Rules** | Automate transition and expiration | Move old data to cheaper storage; delete expired logs |
+| **S3 Analytics** | Analyze access patterns | Determine optimal transition timing |
+| **Requester Pays** | Shift download costs to requester | Share large datasets without paying egress |
+| **Event Notifications** | Trigger workflows on S3 events | Auto-generate thumbnails, process uploads |
+| **Multi-Part Upload** | Speed up large file uploads | Upload files >100MB faster |
+| **Transfer Acceleration** | Speed up global uploads | Upload from distant locations faster |
+| **Byte-Range Fetches** | Download file parts in parallel | Speed up downloads; read file headers |
+| **Batch Operations** | Bulk actions on millions of objects | Tag, encrypt, or copy large datasets |
+| **Storage Lens** | Analyze and optimize storage | Reduce costs, improve security posture |
+
+---
+
+## Best Practices
+
+### Cost Optimization
+
+1. Use **Lifecycle Rules** to transition old data to cheaper storage
+2. Enable **S3 Analytics** to understand access patterns
+3. Use **Intelligent-Tiering** for unpredictable workloads
+4. Delete **incomplete multipart uploads** automatically
+5. Use **Storage Lens** to identify unused buckets
+
+### Performance Optimization
+
+1. Use **multi-part upload** for files >100MB
+2. Enable **Transfer Acceleration** for global users
+3. Use **byte-range fetches** for large downloads
+4. Distribute objects across **multiple prefixes**
+5. Use **CloudFront CDN** for frequently accessed content
+
+### Security & Compliance
+
+1. Enable **versioning** for important data
+2. Use **Storage Lens** to audit security configurations
+3. Configure **Block Public Access** by default
+4. Enable **S3 Event Notifications** for audit trails
+5. Use **MFA Delete** for critical buckets
+
+---
+
+## Real-World Architecture Example
+
+### Media Processing Pipeline
+
+User uploads video → S3 Bucket (Standard)
+↓ (S3 Event Notification)
+Lambda triggered → Process video
+↓
+Store processed video → S3 (Standard)
+↓ (Lifecycle Rule after 30 days)
+Transition to Standard-IA
+↓ (Lifecycle Rule after 90 days)
+Transition to Glacier Flexible Retrieval
+↓ (Lifecycle Rule after 365 days)
+Transition to Glacier Deep Archive
+
+**Cost savings:** Automatically moves old content to cheaper storage while keeping recent content fast to access.
+
+---
+
+**📝 Note:** This content covers advanced Amazon S3 features essential for the AWS Solutions Architect certification exam and real-world applications.
