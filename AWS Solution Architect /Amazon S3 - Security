@@ -1,0 +1,1460 @@
+# Amazon S3 – Security
+
+---
+
+# Amazon S3 – Object Encryption
+
+## Overview
+
+You can encrypt objects in S3 buckets using **one of 4 methods**:
+
+### Server-Side Encryption (SSE)
+
+#### 1. SSE-S3: Server-Side Encryption with Amazon S3-Managed Keys
+- **Enabled by Default**
+- Encrypts S3 objects using keys handled, managed, and owned by AWS
+
+#### 2. SSE-KMS: Server-Side Encryption with KMS Keys stored in AWS KMS
+- Leverage AWS Key Management Service (AWS KMS) to manage encryption keys
+- Provides user control + audit key usage using CloudTrail
+
+#### 3. SSE-C: Server-Side Encryption with Customer-Provided Keys
+- When you want to manage your own encryption keys outside of AWS
+
+### Client-Side Encryption
+
+#### 4. Client-Side Encryption
+- Client encrypts data before sending to S3
+- Client decrypts data after retrieving from S3
+
+---
+
+## 📝 Important Note
+
+**It's important to understand which ones are for which situation for the exam**
+
+---
+
+# Amazon S3 Encryption – SSE-S3
+
+## Overview
+
+- Encryption using keys **handled, managed, and owned by AWS**
+- Object is encrypted **server-side**
+- Encryption type is **AES-256**
+- Must set header: `"x-amz-server-side-encryption": "AES256"`
+- **Enabled by default for new buckets & new objects**
+
+## Diagram: SSE-S3 Architecture Flow
+
+**Step-by-Step Process:**
+
+1. **User uploads file**
+   - User → HTTP(S) + Header → Amazon S3
+   - Header contains: "x-amz-server-side-encryption": "AES256"
+
+2. **Inside Amazon S3:**
+   - Object (unencrypted) + S3 Owned Key
+   - ↓
+   - Encryption Process (AES-256)
+   - ↓
+   - Encrypted Object stored in S3 Bucket
+
+**Visual Representation:**
+
+    User
+     |
+     | (upload file)
+     | HTTP(S) + Header
+     |
+     v
+    ┌────────────────────────────────┐
+    |       Amazon S3                |
+    |                                |
+    |  Object + S3 Owned Key         |
+    |         ↓                      |
+    |    [Encryption]                |
+    |         ↓                      |
+    |    S3 Bucket (Encrypted)       |
+    └────────────────────────────────┘
+
+**Key Points:**
+- AWS manages the encryption keys completely
+- No user intervention needed for key management
+- Enabled by default for new buckets
+
+---
+
+# Amazon S3 Encryption – SSE-KMS
+
+## Overview
+
+- Encryption using keys **handled and managed by AWS KMS** (Key Management Service)
+- **KMS advantages:** user control + audit key usage using CloudTrail
+- Object is encrypted **server side**
+- Must set header: `"x-amz-server-side-encryption": "aws:kms"`
+
+## Diagram: SSE-KMS Architecture Flow
+
+**Step-by-Step Process:**
+
+1. **User uploads file**
+   - User → HTTP(S) + Header → Amazon S3
+   - Header contains: "x-amz-server-side-encryption": "aws:kms"
+
+2. **Inside Amazon S3:**
+   - Object (unencrypted)
+   - S3 requests encryption key from AWS KMS
+   - AWS KMS provides KMS Key
+   - Object + KMS Key → Encryption
+   - Encrypted Object stored in S3 Bucket
+
+**Visual Representation:**
+
+    User
+     |
+     | (upload file)
+     | HTTP(S) + Header
+     |
+     v
+    ┌────────────────────────────────┐
+    |       Amazon S3                |
+    |                                |
+    |  Object ───┐                   |
+    |            |                   |
+    |            ├──> [Encryption]   |
+    |            |         ↓         |
+    |  AWS KMS ──┘    S3 Bucket      |
+    |  (KMS Key)      (Encrypted)    |
+    └────────────────────────────────┘
+
+**Key Points:**
+- User has control over KMS keys
+- All key usage is logged in CloudTrail for auditing
+- Better for compliance requirements
+
+---
+
+# SSE-KMS Limitation
+
+## Overview
+
+If you use SSE-KMS, you may be **impacted by the KMS limits**
+
+### How It Works
+
+- When you **upload**, it calls the **GenerateDataKey** KMS API
+- When you **download**, it calls the **Decrypt** KMS API
+- Both count towards the **KMS quota per second**
+
+### KMS API Quotas
+
+- **5,500 requests/second** (baseline)
+- **10,000 requests/second** (can be increased)
+- **30,000 requests/second** (maximum with quota increase)
+- Quotas vary by region
+
+### Diagram: SSE-KMS API Flow
+
+**Upload/Download Flow:**
+
+    Users
+     |
+     | Upload / download
+     | SSE-KMS
+     |
+     v
+    ┌──────────┐  API call   ┌──────────┐
+    | S3 Bucket| ◄─────────► | KMS Key  |
+    └──────────┘             └──────────┘
+
+**What happens:**
+1. Every upload → GenerateDataKey API call to KMS
+2. Every download → Decrypt API call to KMS
+3. These calls count against your KMS quota
+
+### Solution
+
+You can **request a quota increase** using the **Service Quotas Console**
+
+**⚠️ Important for Exam:**
+- High-traffic S3 buckets with SSE-KMS can hit KMS throttling limits
+- This is a common exam scenario question
+
+---
+
+# Amazon S3 Encryption – SSE-C
+
+## Overview
+
+- **Server-Side Encryption** using keys **fully managed by the customer outside of AWS**
+- Amazon S3 does **NOT store the encryption key** you provide
+- **HTTPS must be used** (mandatory)
+- Encryption key must be provided in **HTTP headers**, for every HTTP request made
+
+## Diagram: SSE-C Architecture Flow
+
+**Step-by-Step Process:**
+
+1. **User uploads file with encryption key**
+   - User has a Client-Provided Key
+   - User uploads file via HTTPS ONLY
+   - Key provided in HTTP header with every request
+
+2. **Inside Amazon S3:**
+   - Object + Client-Provided Key → Encryption
+   - S3 encrypts the object
+   - S3 DISCARDS the key (does not store it)
+   - Encrypted object stored in S3 Bucket
+
+**Visual Representation:**
+
+    User
+     |
+     | (File + Key)
+     | HTTPS ONLY
+     | + Key in Header
+     |
+     v
+    ┌────────────────────────────────┐
+    |       Amazon S3                |
+    |                                |
+    |  Object + Client-Provided Key  |
+    |         ↓                      |
+    |    [Encryption]                |
+    |         ↓                      |
+    |    S3 Bucket (Encrypted)       |
+    |                                |
+    |  (Key is NOT stored by S3)     |
+    └────────────────────────────────┘
+
+**Key Points:**
+- **You manage encryption keys** completely
+- **HTTPS is mandatory** (HTTP will not work)
+- You must provide the same key for download/decryption
+- Key must be sent with every request
+- S3 never stores your encryption key
+
+---
+
+# Amazon S3 Encryption – Client-Side Encryption
+
+## Overview
+
+- Use client libraries such as **Amazon S3 Client-Side Encryption Library**
+- **Clients must encrypt data themselves before sending to Amazon S3**
+- **Clients must decrypt data themselves when retrieving from Amazon S3**
+- **Customer fully manages the keys and encryption cycle**
+
+## Diagram: Client-Side Encryption Flow
+
+**Step-by-Step Process:**
+
+1. **Client-side (before upload):**
+   - User has a file and Client Key
+   - User encrypts the file using the Client Key
+   - Encrypted file is created
+
+2. **Upload to S3:**
+   - Encrypted file uploaded via HTTP(S)
+   - S3 stores the encrypted file as-is
+
+3. **Download from S3:**
+   - User downloads encrypted file
+   - User decrypts file using the same Client Key
+
+**Visual Representation:**
+
+    Client Side                         Amazon S3
+    
+    File + Client Key
+         ↓
+    [Encryption]
+         ↓
+    Encrypted File ─────upload─────►  S3 Bucket
+                     HTTP(S)          (Encrypted)
+                     
+    
+    Encrypted File ◄────download───── S3 Bucket
+         ↓                            (Encrypted)
+    [Decryption]
+         ↓
+    Original File
+
+**Key Points:**
+- **Encryption happens on client side BEFORE upload**
+- S3 only receives encrypted data
+- S3 has no knowledge of encryption keys or process
+- Customer has full control and responsibility
+- Useful when you don't trust AWS with unencrypted data
+
+---
+
+# Amazon S3 – Encryption in Transit (SSL/TLS)
+
+## Overview
+
+Encryption in flight is also called **SSL/TLS**
+
+### Amazon S3 Exposes Two Endpoints:
+
+1. **HTTP Endpoint** – non encrypted
+2. **HTTPS Endpoint** – encryption in flight (SSL/TLS)
+
+### Recommendations
+
+- ✅ **HTTPS is recommended**
+- ✅ **HTTPS is mandatory for SSE-C**
+- ✅ Most clients would use the HTTPS endpoint by default
+
+### Visual Representation:
+
+    User ──── HTTP ────X──► S3 (Not Encrypted)
+    
+    User ──── HTTPS ───✓──► S3 (Encrypted in Transit)
+
+**Key Points:**
+- SSL/TLS encrypts data while traveling over the network
+- Protects against man-in-the-middle attacks
+- HTTPS is enforced by default in most AWS SDKs
+
+---
+
+# Amazon S3 – Force Encryption in Transit (aws:SecureTransport)
+
+## Overview
+
+You can **force HTTPS** by using a **Bucket Policy** that denies any request made over HTTP.
+
+## Diagram: Force HTTPS with Bucket Policy
+
+**Scenario:**
+
+    User 1 ──── http ────X─► Denied (Bucket Policy blocks HTTP)
+                             
+    User 2 ──── https ───✓─► Allowed (HTTPS is accepted)
+                             
+                             S3 Bucket (my-bucket)
+                             Bucket Policy enforces HTTPS
+
+### Bucket Policy Example:
+
+**Policy JSON:**
+
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Deny",
+          "Principal": "*",
+          "Action": "s3:GetObject",
+          "Resource": "arn:aws:s3:::my-bucket/*",
+          "Condition": {
+            "Bool": {
+              "aws:SecureTransport": "false"
+            }
+          }
+        }
+      ]
+    }
+
+**How it works:**
+- The condition `"aws:SecureTransport": "false"` checks if the request is NOT using HTTPS
+- If the request is HTTP (not secure), the policy **Denies** the action
+- Only HTTPS requests are allowed
+
+**Key Points:**
+- Use `aws:SecureTransport` condition in bucket policies
+- Set it to `"false"` and use `"Effect": "Deny"` to block HTTP
+- This enforces encryption in transit
+
+---
+
+# Amazon S3 – Default Encryption vs. Bucket Policies
+
+## Overview
+
+- **SSE-S3 encryption** is automatically applied to **new objects** stored in S3 bucket
+- Optionally, you can **"force encryption"** using a bucket policy and **refuse any API call** to PUT an S3 object without encryption headers (SSE-KMS or SSE-C)
+
+## Comparison: Two Bucket Policies
+
+### Policy 1: Deny if No SSE-KMS Header
+
+**Denies upload if encryption header is missing:**
+
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Deny",
+          "Action": "s3:PutObject",
+          "Principal": "*",
+          "Resource": "arn:aws:s3:::my-bucket/*",
+          "Condition": {
+            "StringNotEquals": {
+              "s3:x-amz-server-side-encryption": "aws:kms"
+            }
+          }
+        }
+      ]
+    }
+
+**What it does:**
+- Denies PUT requests that don't have the SSE-KMS encryption header
+- Forces all uploads to use SSE-KMS encryption
+
+### Policy 2: Deny if No Customer Algorithm Header
+
+**Denies upload if customer-provided encryption is not specified:**
+
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Deny",
+          "Action": "s3:PutObject",
+          "Principal": "*",
+          "Resource": "arn:aws:s3:::my-bucket/*",
+          "Condition": {
+            "Null": {
+              "s3:x-amz-server-side-encryption-customer-algorithm": "true"
+            }
+          }
+        }
+      ]
+    }
+
+**What it does:**
+- Denies PUT requests that don't have the SSE-C customer algorithm header
+- Forces all uploads to use SSE-C (customer-provided keys)
+
+## ⚠️ Important Note
+
+**Bucket Policies are evaluated BEFORE "Default Encryption"**
+
+This means:
+- If a bucket policy denies unencrypted uploads, it will block them even if default encryption is enabled
+- Bucket policies take precedence
+- Default encryption is a fallback, not a security control
+
+---
+
+# What is CORS?
+
+## Overview
+
+**CORS** = **Cross-Origin Resource Sharing**
+
+### Understanding Origin
+
+**Origin** = scheme (protocol) + host (domain) + port
+
+Examples:
+- `https://www.example.com` (implied port is 443 for HTTPS, 80 for HTTP)
+- `http://www.example.com:80`
+- `https://api.example.com:443`
+
+### Same Origin vs Different Origin
+
+**Same origin:**
+- `http://example.com/app1` ✓ Same origin
+- `http://example.com/app2` ✓ Same origin
+
+**Different origins:**
+- `http://www.example.com` ✗ Different origin
+- `http://other.example.com` ✗ Different origin (different subdomain)
+
+### What is CORS?
+
+**CORS** is a **Web Browser** based mechanism to allow requests to other origins while visiting the main origin.
+
+### How CORS Works
+
+The requests won't be fulfilled **unless the other origin allows for the requests**, using **CORS Headers** (example: `Access-Control-Allow-Origin`)
+
+## Diagram: CORS Preflight Request Flow
+
+**Scenario:**
+
+    Web Server (Origin)            Web Browser            Web Server (Cross-Origin)
+    https://www.example.com                              https://www.other.com
+    
+    Step 1: User visits origin
+           ◄───── HTTPS Request ───── User
+    
+    Step 2: Browser makes preflight request
+                                           OPTIONS /
+                                           Host: www.other.com
+                                           Origin: https://www.example.com
+                                  ──────────────────────►
+    
+    Step 3: Server responds with CORS headers
+                                           Preflight Response:
+                                           Access-Control-Allow-Origin: https://www.example.com
+                                           Access-Control-Allow-Methods: GET, PUT, DELETE
+                                  ◄──────────────────────
+    
+    Step 4: Browser makes actual request (if allowed)
+                                           GET /
+                                           Host: www.other.com
+                                           Origin: https://www.example.com
+                                  ──────────────────────►
+    
+    Step 5: Server responds with data
+                                           CORS Headers received already by the Origin
+                                           The Web Browser can make requests
+                                  ◄──────────────────────
+
+**Key Points:**
+- Browser sends an **OPTIONS** request first (preflight)
+- Server responds with allowed origins and methods
+- Browser checks if origin is allowed
+- If allowed, browser makes the actual request
+
+---
+
+# Amazon S3 – CORS
+
+## Overview
+
+If a client makes a **cross-origin request** on our S3 bucket, we need to enable the correct **CORS headers**
+
+### Key Points
+
+- It's a **popular exam question**
+- You can allow for a **specific origin** or for **\*** (all origins)
+
+## Diagram: S3 CORS Example
+
+**Scenario: Static Website Accessing S3 Assets**
+
+    Web Browser
+        |
+        | GET /index.html
+        | Host: http://my-bucket-html.s3-website.us-west-2.amazonaws.com
+        |
+        v
+    ┌─────────────────────────────────────────────────┐
+    |  S3 Bucket: my-bucket-html                      |
+    |  (Static Website Enabled)                       |
+    |                                                 |
+    |  Returns: index.html                            |
+    └─────────────────────────────────────────────────┘
+        |
+        | index.html contains reference to:
+        | GET /images/coffee.jpg
+        | Host: http://my-bucket-assets.s3-website.us-west-2.amazonaws.com
+        | Origin: http://my-bucket-html.s3-website.us-west-2.amazonaws.com
+        |
+        v
+    ┌─────────────────────────────────────────────────┐
+    |  S3 Bucket: my-bucket-assets                    |
+    |  (Static Website Enabled)                       |
+    |                                                 |
+    |  CORS enabled with:                             |
+    |  Access-Control-Allow-Origin:                   |
+    |  http://my-bucket-html.s3-website.us-west-2...  |
+    |                                                 |
+    |  Returns: coffee.jpg                            |
+    └─────────────────────────────────────────────────┘
+
+**What's happening:**
+
+1. User requests `index.html` from first S3 bucket (my-bucket-html)
+2. Browser loads the HTML page
+3. HTML contains image reference to DIFFERENT S3 bucket (my-bucket-assets)
+4. Browser makes **cross-origin request** for the image
+5. my-bucket-assets must have **CORS policy** allowing requests from my-bucket-html
+6. If CORS headers match, browser loads the image
+
+**CORS Configuration Example for my-bucket-assets:**
+
+    [
+      {
+        "AllowedHeaders": ["*"],
+        "AllowedMethods": ["GET"],
+        "AllowedOrigins": ["http://my-bucket-html.s3-website.us-west-2.amazonaws.com"],
+        "ExposeHeaders": []
+      }
+    ]
+
+**Key Exam Points:**
+- Cross-bucket access requires CORS configuration
+- The **destination bucket** (my-bucket-assets) needs CORS policy
+- The **origin** in CORS policy must match the referring bucket URL
+
+---
+
+# Amazon S3 – MFA Delete
+
+## Overview
+
+**MFA** (Multi-Factor Authentication) – force users to generate a code on a device (usually a mobile phone or hardware) before doing important operations on S3
+
+### MFA will be required to:
+- ✅ **Permanently delete an object version**
+- ✅ **Suspend Versioning on the bucket**
+
+### MFA won't be required to:
+- ❌ Enable Versioning
+- ❌ List deleted versions
+
+### Important Requirements
+
+- To use MFA Delete, **Versioning must be enabled** on the bucket
+- **Only the bucket owner (root account) can enable/disable MFA Delete**
+
+### Visual Representation:
+
+    Google Authenticator (Mobile App)
+    MFA Hardware Device
+        ↓
+    Generated Code
+        ↓
+    Required for:
+    - Permanently delete object version
+    - Suspend versioning
+
+**Key Exam Points:**
+- MFA Delete requires versioning to be enabled
+- Only root account can configure MFA Delete
+- Protects against accidental permanent deletions
+- Additional security layer for critical operations
+
+---
+
+# S3 Access Logs
+
+## Overview
+
+- For **audit purpose**, you may want to log all access to S3 buckets
+- Any request made to S3, from any account, **authorized or denied**, will be logged into **another S3 bucket**
+- That data can be analyzed using **data analysis tools**
+- The target **logging bucket must be in the same AWS region**
+
+## Diagram: S3 Access Logs Flow
+
+**Architecture:**
+
+    User
+     |
+     | requests (GET, PUT, DELETE, etc.)
+     |
+     v
+    ┌──────────────┐
+    |  My-bucket   |  ───── Log all requests ────►  ┌─────────────────┐
+    └──────────────┘                                |  Logging Bucket |
+                                                    └─────────────────┘
+
+**What gets logged:**
+- All API calls (GET, PUT, POST, DELETE, etc.)
+- Success and failure responses
+- Requester information
+- Timestamp
+- Request details
+
+**Log Format Documentation:**
+https://docs.aws.amazon.com/AmazonS3/latest/dev/LogFormat.html
+
+**Key Points:**
+- Logs are written to a separate S3 bucket
+- Both buckets must be in the same region
+- Useful for security audits and compliance
+
+---
+
+# S3 Access Logs: Warning
+
+## ⚠️ CRITICAL WARNING
+
+**Do not set your logging bucket to be the monitored bucket**
+
+### What happens if you do:
+
+    User
+     |
+     | PutObject
+     |
+     v
+    ┌────────────────────────────┐
+    |  App Bucket &              | ─────┐ Logging loop
+    |  Logging Bucket            |      |
+    |  (Same bucket!)            | ◄────┘
+    └────────────────────────────┘
+
+**The Problem:**
+
+1. User uploads object to bucket
+2. Bucket logs the request to itself
+3. Logging creates a new object
+4. New object triggers another log entry
+5. New log entry creates another object
+6. **INFINITE LOOP** → Bucket grows exponentially
+
+**Result:**
+- Your bucket will grow **exponentially**
+- Massive storage costs
+- Potential service disruption
+
+**Warning Message:**
+🚫 **Do not try this at home!** 😊
+
+**Best Practice:**
+- Always use a separate, dedicated bucket for logs
+- Never point logging to the same bucket being monitored
+
+---
+
+# Amazon S3 – Pre-Signed URLs
+
+## Overview
+
+Generate **pre-signed URLs** using the **S3 Console**, **AWS CLI**, or **SDK**
+
+### URL Expiration
+
+**S3 Console:**
+- Minimum: 1 minute
+- Maximum: 720 minutes (12 hours)
+
+**AWS CLI:**
+- Configure expiration with `--expires-in` parameter in seconds
+- Default: 3600 seconds (1 hour)
+- Maximum: 604800 seconds (168 hours = 7 days)
+
+### How It Works
+
+Users given a pre-signed URL **inherit the permissions of the user that generated the URL** for GET / PUT
+
+## Diagram: Pre-Signed URLs Flow
+
+**Architecture:**
+
+    Owner
+      |
+      | generate pre-signed URL
+      |
+      v
+    ┌──────────────────┐
+    |    S3 Bucket     |
+    |    (Private)     |
+    └──────────────────┘
+      ↑            |
+      |            | pre-signed URL
+      | URL        | (includes permissions)
+      |            ↓
+    User ──────────┘
+
+**Flow:**
+1. Owner generates pre-signed URL via Console/CLI/SDK
+2. Owner shares URL with user (via email, app, etc.)
+3. User uses URL to access S3 object
+4. S3 validates the URL and permissions
+5. User can GET or PUT object (based on URL permissions)
+
+### Use Cases (Examples):
+
+1. **Allow only logged-in users to download a premium video from your S3 bucket**
+   - Generate short-lived pre-signed URL after user logs in
+   - URL expires after download or time limit
+
+2. **Allow an ever-changing list of users to download files by generating URLs dynamically**
+   - Generate unique pre-signed URL for each user/download
+   - URLs can have different expiration times
+
+3. **Allow temporarily a user to upload a file to a precise location in your S3 bucket**
+   - Generate PUT pre-signed URL
+   - User can upload directly to S3 without AWS credentials
+   - URL expires after upload window
+
+**Key Exam Points:**
+- Pre-signed URLs grant temporary access to private objects
+- User inherits permissions of the URL generator
+- Expiration times vary by generation method (Console vs CLI)
+- Useful for temporary access without changing bucket policies
+
+---
+
+# S3 Glacier Vault Lock
+
+## Overview
+
+- Adopt a **WORM** (Write Once Read Many) model
+- Create a **Vault Lock Policy**
+- **Lock the policy for future edits** (can no longer be changed or deleted)
+- Helpful for **compliance and data retention**
+
+## Diagram: Glacier Vault Lock
+
+**Visual Representation:**
+
+    Object
+      ↓
+    ┌─────────────────────────┐
+    |   Vault Lock Policy     |
+    |                         |
+    | Object can't be deleted |
+    |                         |
+    | 🔒 Policy is LOCKED     |
+    └─────────────────────────┘
+
+**How it works:**
+1. Upload object to Glacier
+2. Create Vault Lock Policy (define retention rules)
+3. Lock the policy
+4. **Policy can NO LONGER be changed or deleted**
+5. Objects protected according to policy rules
+
+**Key Features:**
+- Once locked, policy is **immutable**
+- Even AWS root user cannot delete objects before retention period
+- Perfect for regulatory compliance (SEC, FINRA, HIPAA, etc.)
+
+**Use Cases:**
+- Regulatory compliance requiring immutable backups
+- Legal hold requirements
+- Long-term data archival with guaranteed retention
+
+---
+
+# S3 Object Lock (versioning must be enabled)
+
+## Overview
+
+- Adopt a **WORM** (Write Once Read Many) model
+- Block an **object version deletion** for a specified amount of time
+- Object Lock comes in two modes: **Compliance** and **Governance**
+
+### Retention Mode - Compliance:
+
+- Object versions **can't be overwritten or deleted** by any user, including the root user
+- Objects retention modes **can't be changed**, and retention periods **can't be shortened**
+- Most restrictive mode
+- Use case: Regulatory requirements where data absolutely cannot be modified
+
+### Retention Mode - Governance:
+
+- Most users **can't overwrite or delete** an object version or alter its lock settings
+- **Some users** have special permissions to change the retention or delete the object
+- More flexible than Compliance mode
+- Use case: Protect objects while still allowing administrators to manage them
+
+### Retention Period:
+
+- **Protect the object for a fixed period**, it can be extended
+- Must specify duration (days/years)
+- After period expires, object can be deleted (unless Legal Hold is active)
+
+### Legal Hold:
+
+- Protect the object **indefinitely**, independent from retention period
+- Can be freely placed and removed using the `s3:PutObjectLegalHold` IAM permission
+- Overrides retention period
+- Use case: Litigation, investigations, audits
+
+## Visual Representation:
+
+**Compliance Mode:**
+    
+    Object Version
+         ↓
+    [Retention Mode: Compliance]
+    - CANNOT be deleted by anyone (including root)
+    - Retention period CANNOT be shortened
+    - Retention mode CANNOT be changed
+    ⏱️ Retention Period: 90 days
+
+**Governance Mode:**
+
+    Object Version
+         ↓
+    [Retention Mode: Governance]
+    - CANNOT be deleted by most users
+    - Special users CAN override with permissions
+    - Retention can be modified by authorized users
+    ⏱️ Retention Period: 30 days (can be extended)
+
+**Legal Hold:**
+
+    Object Version
+         ↓
+    [Legal Hold: ON]
+    - Protected INDEFINITELY
+    - Can be removed with s3:PutObjectLegalHold permission
+    - Independent from retention period
+    🔒 Active until manually removed
+
+**Key Exam Points:**
+- **Versioning must be enabled** to use Object Lock
+- **Compliance** = strictest, no exceptions
+- **Governance** = flexible, allows special permissions
+- **Legal Hold** = indefinite protection, separate from retention
+
+---
+
+# S3 – Access Points
+
+## Overview
+
+**Access Points simplify security management for S3 Buckets**
+
+### Key Features
+
+- Each Access Point has:
+  - **Its own DNS name** (Internet Origin or VPC Origin)
+  - **An access point policy** (similar to bucket policy) – manage security at scale
+
+## Diagram: S3 Access Points Architecture
+
+**Scenario: Different teams accessing different prefixes**
+
+    Users (Finance)
+         |
+         | Policy: Grant R/W to /finance prefix
+         |
+         v
+    ┌──────────────────┐
+    | Finance          |
+    | Access Point     | ────┐
+    └──────────────────┘     |
+                             |
+    Users (Sales)            |        ┌─────────────────┐
+         |                   ├───────►|   S3 Bucket     |
+         | Policy: Grant R/W |        |                 |
+         | to /sales prefix  |        | /finance/...    |
+         |                   |        | /sales/...      |
+         v                   |        | (other data)    |
+    ┌──────────────────┐     |        └─────────────────┘
+    | Sales            |     |                ▲
+    | Access Point     | ────┘                |
+    └──────────────────┘                      |
+                                              |
+    Users (Analytics)                         |
+         |                                    |
+         | Policy: Grant R to entire bucket   |
+         |                                    |
+         v                                    |
+    ┌──────────────────┐                     |
+    | Analytics        | ────────────────────┘
+    | Access Point     |
+    └──────────────────┘
+
+**How it works:**
+
+1. **Finance Access Point:**
+   - Has policy granting READ/WRITE to `/finance/*` prefix only
+   - Finance users access bucket through this access point
+   - Can only see/modify finance data
+
+2. **Sales Access Point:**
+   - Has policy granting READ/WRITE to `/sales/*` prefix only
+   - Sales users access bucket through this access point
+   - Can only see/modify sales data
+
+3. **Analytics Access Point:**
+   - Has policy granting READ to entire bucket
+   - Analytics users access bucket through this access point
+   - Can read all data but cannot modify
+
+4. **Simple Bucket Policy:**
+   - Bucket policy remains simple
+   - Complexity moved to Access Point policies
+   - Easier to manage at scale
+
+**Benefits:**
+- ✅ Simplifies permission management
+- ✅ Each team has its own entry point
+- ✅ Policies are isolated and easier to audit
+- ✅ Scales better than complex bucket policies
+- ✅ Can be VPC-specific for private access
+
+---
+
+# S3 – Access Points – VPC Origin
+
+## Overview
+
+- We can define the access point to be **accessible only from within the VPC**
+- You must create a **VPC Endpoint** to access the Access Point (Gateway or Interface Endpoint)
+- The **VPC Endpoint Policy** must allow access to the target bucket and Access Point
+
+## Diagram: S3 Access Points VPC Origin
+
+**Architecture Flow:**
+
+    ┌───────────────────────────────────────────────────────────┐
+    |                         VPC                               |
+    |                                                           |
+    |   ┌──────────────┐        ┌─────────────────┐           |
+    |   |              |        |                 |           |
+    |   | EC2 Instance |───────►| VPC Endpoint    |           |
+    |   |              |        |                 |           |
+    |   └──────────────┘        |  ☑ Endpoint     |           |
+    |                           |  ☒ Policy       |           |
+    |                           |                 |           |
+    |                           └────────┬────────┘           |
+    |                                    |                    |
+    └────────────────────────────────────┼────────────────────┘
+                                         |
+                                         |
+                                         ↓
+                            ┌────────────────────────┐
+                            |  Access Point          |
+                            |  (VPC Origin)          |
+                            |                        |
+                            |  ☑ Access Point Policy |
+                            |  ☒ (VPC only access)   |
+                            └──────────┬─────────────┘
+                                       |
+                                       ↓
+                            ┌──────────────────┐
+                            |   S3 Bucket      |
+                            |                  |
+                            |  ☑ Bucket Policy |
+                            |  ☒               |
+                            └──────────────────┘
+
+**Step-by-Step Flow:**
+
+1. **EC2 Instance** (or any resource in VPC) initiates request to S3
+2. Request travels through **VPC Endpoint** (private AWS network connection)
+3. **VPC Endpoint Policy** checks if request is allowed
+4. Request reaches **Access Point (VPC Origin)** configured to only accept VPC traffic
+5. **Access Point Policy** validates permissions for the specific operation
+6. If all policies allow, request reaches **S3 Bucket**
+7. **Bucket Policy** performs final authorization check
+8. Data returned through the same secure path
+
+## VPC Endpoint Policy Example:
+
+**Policy JSON:**
+
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Principal": "*",
+          "Action": [
+            "s3:GetObject"
+          ],
+          "Effect": "Allow",
+          "Resource": [
+            "arn:aws:s3:::awsexamplebucket1/*",
+            "arn:aws:s3:us-west-2:123456789012:accesspoint/example-vpc-ap/object/*"
+          ]
+        }
+      ]
+    }
+
+**What this policy does:**
+- Allows any principal (within VPC) to perform `s3:GetObject`
+- Applies to objects in bucket `awsexamplebucket1`
+- Also applies to objects accessed through access point `example-vpc-ap`
+
+## Key Components Explained:
+
+### 1. VPC Endpoint:
+- Provides **private connectivity** to S3 (no internet gateway needed)
+- Two types: **Gateway Endpoint** (free) or **Interface Endpoint** (charged)
+- Traffic never leaves AWS network
+
+### 2. Endpoint Policy:
+- Controls **what can be accessed** through the VPC endpoint
+- Acts as first layer of security
+- Can restrict access to specific buckets or access points
+
+### 3. Access Point (VPC Origin):
+- Configured to **only accept requests from specific VPC**
+- Has its own DNS name (format: `accesspoint-name-account-id.s3-accesspoint.region.amazonaws.com`)
+- Rejects all requests not originating from the configured VPC
+
+### 4. Access Point Policy:
+- Defines **permissions** for accessing bucket resources
+- Similar to bucket policy but scoped to access point
+- Can restrict by prefix, action, or conditions
+
+### 5. Bucket Policy:
+- Final authorization layer
+- Can delegate permissions to access points
+- Keeps bucket policy simple
+
+## Benefits:
+
+- ✅ **Private access** (never leaves AWS network)
+- ✅ **Enhanced security** (VPC-only access, no public internet exposure)
+- ✅ **No internet gateway required**
+- ✅ **Controlled through multiple policy layers** (defense in depth)
+- ✅ **Cost-effective** (no data transfer charges over internet)
+- ✅ **Compliance-friendly** (data never traverses public internet)
+
+## Use Cases:
+
+1. **Sensitive data access:** Financial records, healthcare data, PII
+2. **Internal applications:** Apps running in VPC need S3 access
+3. **Compliance requirements:** Data must not traverse public internet
+4. **Multi-tenant architectures:** Isolate access per team/department via VPC
+
+## Key Exam Points:
+
+- **VPC Origin access points require VPC Endpoints** (Gateway or Interface)
+- **Three policy layers:** Endpoint Policy + Access Point Policy + Bucket Policy (all must allow)
+- Traffic **never traverses the public internet**
+- Access Point **rejects requests** not from configured VPC
+- Useful for **sensitive data** and **compliance requirements**
+- **No data transfer charges** over internet (cost optimization)
+
+---
+
+# S3 Object Lambda
+
+## Overview
+
+**Use AWS Lambda Functions to change the object before it is retrieved by the caller application**
+
+### Architecture Requirements
+
+- Only **one S3 bucket** is needed, on top of which we create:
+  - **S3 Access Point** (standard access point)
+  - **S3 Object Lambda Access Points** (special type that invokes Lambda)
+
+## Use Cases:
+
+### 1. Redacting personally identifiable information for analytics or non-production environments
+- Remove sensitive data (SSN, credit cards, names) on-the-fly
+- Analytics applications get sanitized data
+- Original data remains intact in S3
+
+### 2. Converting across data formats, such as converting XML to JSON
+- Store data in one format (e.g., XML)
+- Different applications get different formats (JSON, CSV, Parquet)
+- No need to store multiple copies
+
+### 3. Resizing and watermarking images on the fly using caller-specific details, such as the user who requested the object
+- E-commerce app requests product image
+- Lambda resizes image based on device type
+- Adds user-specific watermark
+- Marketing app gets enriched version with branding
+
+## Diagram: S3 Object Lambda Architecture
+
+**Complete Flow with Three Applications:**
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    |                        AWS Cloud                                |
+    |                                                                 |
+    |                          ┌──────────────┐                      |
+    |                          |  S3 Bucket   |                      |
+    |                          | (Original    |                      |
+    |                          |  Objects)    |                      |
+    |                          └──────┬───────┘                      |
+    |                                 |                               |
+    |                                 ↓                               |
+    |                    ┌────────────────────────┐                  |
+    |                    | Supporting S3          |                  |
+    |                    | Access Point           |                  |
+    |                    | (Standard)             |                  |
+    |                    └───────┬────────────────┘                  |
+    |                            |                                    |
+    |        ┌───────────────────┼───────────────────┐               |
+    |        |                   |                   |               |
+    |        ↓                   ↓                   ↓               |
+    |  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       |
+    |  | S3 Object   |    | S3 Object   |    | S3 Object   |       |
+    |  | Lambda      |    | Lambda      |    | Lambda      |       |
+    |  | Access Point|    | Access Point|    | Access Point|       |
+    |  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘       |
+    |         |                  |                  |                |
+    |         ↓                  ↓                  ↓                |
+    |  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐       |
+    |  | Redacting   |    | Enriching   |    | Customer     |       |
+    |  | Lambda      |    | Lambda      |    | Loyalty DB   |       |
+    |  | Function    |    | Function    |    | (External)   |       |
+    |  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘       |
+    |         |                  |                  |                |
+    └─────────┼──────────────────┼──────────────────┼────────────────┘
+              |                  |                  |
+              ↓                  ↓                  ↓
+    ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+    | E-Commerce     |  | Analytics      |  | Marketing      |
+    | Application    |  | Application    |  | Application    |
+    |                |  |                |  |                |
+    | (Original      |  | (Redacted      |  | (Enriched      |
+    |  Object)       |  |  Object)       |  |  Object)       |
+    └────────────────┘  └────────────────┘  └────────────────┘
+
+## How It Works (Step-by-Step):
+
+### Flow 1: E-Commerce Application (Original Object)
+
+1. **E-Commerce Application** requests object
+2. Request goes to **S3 Object Lambda Access Point**
+3. Lambda Access Point retrieves object from **Supporting S3 Access Point**
+4. Supporting Access Point gets object from **S3 Bucket**
+5. Object returned **without transformation** (or minimal transformation)
+6. E-Commerce app receives **original object**
+
+### Flow 2: Analytics Application (Redacted Object)
+
+1. **Analytics Application** requests object
+2. Request goes to **S3 Object Lambda Access Point** (analytics-specific)
+3. Lambda Access Point invokes **Redacting Lambda Function**
+4. Lambda retrieves object from **Supporting S3 Access Point** → **S3 Bucket**
+5. **Redacting Lambda** removes PII:
+   - Removes SSN, credit card numbers
+   - Masks names and addresses
+   - Anonymizes phone numbers
+6. Analytics app receives **redacted/sanitized object**
+
+### Flow 3: Marketing Application (Enriched Object)
+
+1. **Marketing Application** requests object
+2. Request goes to **S3 Object Lambda Access Point** (marketing-specific)
+3. Lambda Access Point invokes **Enriching Lambda Function**
+4. Lambda retrieves object from **Supporting S3 Access Point** → **S3 Bucket**
+5. **Enriching Lambda**:
+   - Queries **Customer Loyalty Database** for additional data
+   - Adds customer tier, preferences, purchase history
+   - Adds marketing segmentation tags
+6. Marketing app receives **enriched object** with extra data
+
+## Key Components Explained:
+
+### 1. S3 Bucket:
+- Stores **original, unmodified objects**
+- Single source of truth
+- No duplicate data storage needed
+
+### 2. Supporting S3 Access Point:
+- Standard S3 Access Point
+- Provides base access to S3 bucket
+- Acts as intermediary between Object Lambda and bucket
+
+### 3. S3 Object Lambda Access Point:
+- **Special type** of access point that invokes Lambda
+- Each application can have its own Object Lambda Access Point
+- Different transformations per access point
+
+### 4. Lambda Functions:
+- **Redacting Lambda:** Removes sensitive data
+- **Enriching Lambda:** Adds data from external sources
+- **Custom transformations:** Any Python/Node.js code
+
+### 5. Applications:
+- Access S3 through Object Lambda Access Points
+- Each gets **customized view** of same data
+- No code changes needed (uses standard S3 API)
+
+## Detailed Use Case Examples:
+
+### Use Case 1: PII Redaction
+
+**Original Object (in S3):**
+
+    {
+      "customer_id": "C12345",
+      "name": "John Doe",
+      "email": "john.doe@example.com",
+      "ssn": "123-45-6789",
+      "credit_card": "4532-1234-5678-9010",
+      "purchase_amount": 150.00
+    }
+
+**Redacted Object (via Lambda for Analytics):**
+
+    {
+      "customer_id": "C12345",
+      "name": "*** REDACTED ***",
+      "email": "*** REDACTED ***",
+      "ssn": "*** REDACTED ***",
+      "credit_card": "*** REDACTED ***",
+      "purchase_amount": 150.00
+    }
+
+### Use Case 2: Data Enrichment
+
+**Original Object (in S3):**
+
+    {
+      "customer_id": "C12345",
+      "order_id": "ORD789",
+      "product": "Laptop",
+      "price": 1200.00
+    }
+
+**Enriched Object (via Lambda for Marketing):**
+
+    {
+      "customer_id": "C12345",
+      "order_id": "ORD789",
+      "product": "Laptop",
+      "price": 1200.00,
+      "customer_tier": "Gold",
+      "lifetime_value": 15000.00,
+      "preferred_categories": ["Electronics", "Accessories"],
+      "marketing_segment": "High-Value Tech Enthusiast"
+    }
+
+### Use Case 3: Format Conversion
+
+**Original (XML in S3):**
+
+    <order>
+      <id>123</id>
+      <customer>John</customer>
+      <total>500</total>
+    </order>
+
+**Converted (JSON via Lambda):**
+
+    {
+      "order": {
+        "id": "123",
+        "customer": "John",
+        "total": 500
+      }
+    }
+
+## Benefits:
+
+- ✅ **One source of truth:** Single copy of data in S3
+- ✅ **Dynamic transformation:** Real-time processing per request
+- ✅ **Application-specific views:** Each app gets customized data
+- ✅ **No data duplication:** Save storage costs
+- ✅ **Centralized logic:** Lambda functions manage transformations
+- ✅ **Standard S3 API:** No app code changes needed
+- ✅ **Security:** Original data never modified
+- ✅ **Compliance:** PII masking for analytics/dev environments
+
+## Key Exam Points:
+
+- **Requires:**
+  1. S3 Bucket (original objects)
+  2. Supporting S3 Access Point (standard)
+  3. S3 Object Lambda Access Point (invokes Lambda)
+  4. Lambda Function (performs transformation)
+
+- **Use cases:**
+  - PII redaction for analytics
+  - Data format conversion (XML → JSON)
+  - Image resizing/watermarking
+  - Data enrichment from external sources
+
+- **Advantages:**
+  - No data duplication
+  - Real-time transformation
+  - Application-specific views
+  - Uses standard S3 API
+
+- **Not a replacement for:**
+  - ETL pipelines (for permanent transformations)
+  - Data lake transformations (use Glue instead)
+
+---
+
+# Summary: Amazon S3 Security
+
+## Encryption Methods Comparison
+
+| Method | Key Management | Use Case | Header Required | HTTPS Required |
+|--------|---------------|----------|-----------------|----------------|
+| **SSE-S3** | AWS manages keys | Default, easiest | `x-amz-server-side-encryption: AES256` | Recommended |
+| **SSE-KMS** | AWS KMS manages keys | Audit trail needed | `x-amz-server-side-encryption: aws:kms` | Recommended |
+| **SSE-C** | Customer manages keys | Full key control | Key in every request | **Mandatory** |
+| **Client-Side** | Customer encrypts before upload | Don't trust AWS with unencrypted data | None | Recommended |
+
+## Access Control Methods
+
+| Method | Purpose | Use Case |
+|--------|---------|----------|
+| **Bucket Policies** | Resource-based permissions | Public access, cross-account, enforce encryption |
+| **IAM Policies** | User-based permissions | Control what IAM users/roles can do |
+| **Access Points** | Simplified management | Large-scale access management by teams/prefixes |
+| **VPC Endpoints** | Private VPC access | Keep traffic private, no internet gateway |
+| **Pre-Signed URLs** | Temporary access | Share private objects temporarily |
+| **ACLs** | Legacy access control | Not recommended (use policies instead) |
+
+## Security Features Comparison
+
+| Feature | Purpose | Key Requirement |
+|---------|---------|----------------|
+| **Versioning** | Protect against accidental deletes | Enabled at bucket level |
+| **MFA Delete** | Extra protection for deletions | Versioning must be enabled, root only |
+| **Object Lock - Compliance** | Immutable retention | Versioning required, strictest mode |
+| **Object Lock - Governance** | Flexible retention | Versioning required, allows overrides |
+| **Glacier Vault Lock** | Permanent WORM policy | Policy cannot be changed once locked |
+| **Access Logs** | Audit all access | Separate logging bucket required |
+| **CORS** | Cross-origin web access | Required for static website cross-bucket access |
+
+## Advanced Features
+
+| Feature | Purpose | Key Requirements |
+|---------|---------|------------------|
+| **Access Points (VPC Origin)** | Private VPC-only access | VPC Endpoint + Endpoint Policy + Access Point Policy |
+| **S3 Object Lambda** | Transform objects on retrieval | Supporting Access Point + Object Lambda Access Point + Lambda Function |
+
+## Encryption in Transit
+
+| Protocol | Security | When to Use |
+|----------|----------|-------------|
+| **HTTP** | ❌ Not encrypted | Never recommended |
+| **HTTPS** | ✅ Encrypted (SSL/TLS) | Always recommended |
+| **Force HTTPS** | ✅ Enforced via policy | Use `aws:SecureTransport` condition |
+
+## Best Practices Summary
+
+### For Compliance & Auditing:
+1. Enable **Versioning**
+2. Enable **MFA Delete** for critical buckets
+3. Use **Object Lock (Compliance)** for regulatory requirements
+4. Enable **Access Logs** for audit trails
+5. Use **SSE-KMS** for CloudTrail audit of key usage
+
+### For Security:
+1. **Block Public Access** by default
+2. Use **Bucket Policies** to enforce encryption
+3. Force **HTTPS** using `aws:SecureTransport`
+4. Use **VPC Endpoints** for private access
+5. Enable **encryption at rest** (SSE-S3 minimum)
+
+### For Access Management:
+1. Use **Access Points** for large-scale management
+2. Use **Pre-Signed URLs** for temporary access
+3. Use **IAM Roles** instead of credentials
+4. Implement **least privilege** principle
+5. Use **VPC Origin Access Points** for sensitive data
+
+### For Data Transformation:
+1. Use **S3 Object Lambda** for real-time transformations
+2. Redact PII for analytics/non-prod environments
+3. Convert data formats on-the-fly
+4. Enrich data from external sources
+5. Single source of truth (no data duplication)
+
+### For Cost Optimization:
+1. Be aware of **SSE-KMS limits** (API quotas)
+2. Use **S3 Access Points** to simplify policies
+3. Monitor **Access Logs** in separate bucket
+4. Avoid **logging loops** (never log to same bucket)
+5. Use **Object Lambda** instead of storing multiple formats
+
+## Common Exam Scenarios
+
+| Scenario | Solution |
+|----------|----------|
+| Need to audit key usage | Use **SSE-KMS** with CloudTrail |
+| Need temporary public access | Use **Pre-Signed URLs** |
+| Force encryption on upload | Use **Bucket Policy** to deny unencrypted PUTs |
+| Cross-origin website access | Enable **CORS** on asset bucket |
+| Comply with WORM requirements | Use **Object Lock (Compliance)** or **Glacier Vault Lock** |
+| Private VPC-only access | Use **Access Points (VPC Origin)** with VPC Endpoint |
+| High-traffic bucket with SSE-KMS | Request **KMS quota increase** |
+| Protect against accidental deletes | Enable **Versioning** + **MFA Delete** |
+| Manage access by teams/prefixes | Use **S3 Access Points** |
+| Redact PII for analytics | Use **S3 Object Lambda** with redacting function |
+| Transform data formats on-the-fly | Use **S3 Object Lambda** with conversion function |
+| Enrich data from external DB | Use **S3 Object Lambda** with enriching function |
+
+---
+
+**📝 Note:** This comprehensive guide covers all Amazon S3 security features, advanced access control mechanisms, and data transformation capabilities essential for the AWS Solutions Architect certification exam and real-world implementations.
