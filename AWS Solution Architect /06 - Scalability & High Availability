@@ -1,0 +1,577 @@
+# Scalability & High Availability
+
+## Overview
+
+- **Scalability** = ability of a system to handle increased load by adapting resources
+- Two types of scalability: **Vertical** (scale up/down) and **Horizontal** (scale out/in)
+- Scalability is related to but different from **High Availability**
+
+### Call Center Analogy
+
+Think of a call center:
+- When customer calls increase, the business needs more capacity (**scalability**)
+- However, the business must also ensure the call center stays open even if a building fails (**high availability**)
+
+---
+
+## Vertical Scalability
+
+### Definition
+- Increase capacity by **increasing the size** of your instance (scale up/down)
+- Example: Move app from `t2.micro` → `t2.large` (bigger CPU/RAM)
+- Works best for **non-distributed systems** like databases
+- Services like **RDS** and **ElastiCache** support vertical scaling
+- Vertical scaling has a **hardware limit** (max instance size)
+
+### Analogy
+- If one call center employee (junior operator) can't handle the calls, replace them with a more experienced operator (senior operator)
+- You're not increasing the number of employees, you're **increasing the power** of one employee
+- Diagram: **Small person → Big person** (increasing capacity of a single resource)
+
+---
+
+## Horizontal Scalability
+
+### Definition
+- Increase capacity by **adding more instances/systems** (scale out/in)
+- Requires **distributed systems architecture**
+- Common for web applications and modern cloud systems
+- AWS **EC2 + Auto Scaling** makes horizontal scaling easy
+
+### Analogy
+- Instead of replacing one operator with a senior operator, **hire more operators** to handle calls
+- Workload is shared — if 1 operator can't pick a call, another one can
+
+### Diagram
+- Shows **multiple identical people** representing multiple servers (instances)
+- Each person (operator) shares the load → same as multiple EC2s handling requests
+
+---
+
+## High Availability
+
+### Definition
+- High Availability usually works **hand-in-hand with horizontal scaling**
+- Means running the system across **multiple Availability Zones** (data centers)
+- **Goal:** system survives a data center failure
+- Can be **passive** (standby mode, e.g., RDS Multi-AZ)
+- Can be **active** (traffic distributed, e.g., Load Balancer)
+
+### Analogy
+- Instead of having one call center building, the company opens another in a **different city**
+- If one building shuts down (power outage), the other continues operations
+
+### Diagram
+- **First image:** operators in New York
+- **Second image:** operators in San Francisco
+- If NY fails → SF continues working
+- That's **high availability**
+
+---
+
+## High Availability & Scalability for EC2
+
+### Vertical Scaling for EC2
+- Increase instance size (scale up/down)
+- Example: `t2.nano` → `u-12tb1.metal` (0.5GB RAM → 12.3TB RAM)
+
+### Horizontal Scaling for EC2
+- Add/remove instances (scale out/in)
+- Use **Auto Scaling Group**
+- Use **Load Balancer**
+
+### High Availability for EC2
+- Run instances across **multiple AZs**
+- **Auto Scaling Group Multi-AZ**
+- **Load Balancer Multi-AZ**
+
+### Summary
+- **Vertical scaling:** make one EC2 bigger
+- **Horizontal scaling:** launch more EC2s
+- **High availability:** run EC2s in multiple AZs, so the app stays alive during failures
+
+---
+
+# Load Balancing
+
+## What is Load Balancing?
+
+**Definition:** Load Balancing is the process of distributing incoming traffic across multiple servers, so no single server becomes overloaded.
+
+**To improve:**
+- Performance
+- Reliability
+- Availability
+
+---
+
+## Why use a Load Balancer?
+
+| Benefit | Explanation |
+|---------|-------------|
+| Spread load across instances | Prevents one server from being overloaded |
+| Single point of access (DNS) | Users access your application via one DNS name (e.g., `app.company.com`) |
+| Handles failures | If a server crashes, LB sends traffic to healthy servers |
+| Health checks | LB constantly checks if servers are healthy |
+| SSL termination | LB handles HTTPS encryption so instances don't have to |
+| Sticky sessions | LB can send returning users to the same instance (using cookies) |
+| High availability | Works across multiple Availability Zones |
+| Public/Private traffic separation | Can expose public LB while servers remain private |
+
+---
+
+## Why use AWS Elastic Load Balancer (ELB)?
+
+### ELB = Managed Load Balancer
+
+**AWS manages:**
+- Upgrades
+- Maintenance
+- High Availability
+
+**You only configure:**
+- Listeners (ports)
+- Target groups (backend EC2s)
+
+Instead of manually configuring your own LB (like HAProxy, Nginx etc.), AWS ELB does everything for you.
+
+**Integrates with:**
+- EC2 & Auto Scaling Groups
+- AWS ACM (for SSL certificates)
+- Route 53
+- CloudWatch (monitoring)
+- AWS WAF (firewall)
+
+---
+
+## Health Checks
+
+Health checks help the load balancer detect if a backend server is healthy.
+
+**How it works:**
+- ELB pings a specific endpoint on each server regularly
+- Example endpoint: `http://EC2:4567/health`
+
+**If the response is:**
+- ✅ `200 OK` → instance is healthy
+- ❌ Anything else → instance is unhealthy (ELB stops sending traffic to it)
+
+---
+
+## Types of Load Balancers in AWS
+
+| Type of LB | Generation | Layer | Protocols Supported | Use Case |
+|------------|------------|-------|---------------------|----------|
+| Classic Load Balancer (CLB) | Old (2009) | Layer 4 & 7 | HTTP, HTTPS, TCP, SSL | Legacy systems |
+| Application Load Balancer (ALB) | New | Layer 7 | HTTP, HTTPS, WebSocket | Web apps (microservices) |
+| Network Load Balancer (NLB) | New | Layer 4 | TCP, UDP, TLS | High performance/low latency |
+| Gateway Load Balancer (GWLB) | 2020 | Layer 3 | IP traffic | Network appliances (firewalls, IDS/IPS) |
+
+---
+
+## Load Balancer Security Groups
+
+A load balancer has one security group, backend EC2s have another.
+
+**Rules:**
+
+| Component | Allows Incoming Traffic From | Ports |
+|-----------|------------------------------|-------|
+| Load Balancer SG | Internet (`0.0.0.0/0`) | 80 (HTTP), 443 (HTTPS) |
+| Application SG (EC2 instances) | Only from Load Balancer SG | App port (e.g., 80 or 8080) |
+
+**Diagram:**
+Users
+|
+v
+[ Load Balancer SG ] <-- Allows inbound HTTP/HTTPS from anywhere
+|
+v
+[ Application SG ] <-- Allows inbound only from Load Balancer
+|
+v
+EC2
+
+
+This protects EC2 instances from direct public access.
+
+---
+
+## Classic Load Balancer (v1)
+
+- Supports TCP (Layer 4), HTTP & HTTPS (Layer 7)
+- Health checks can be TCP or HTTP based
+- Uses a fixed DNS hostname (`xxx.region.elb.amazonaws.com`)
+
+**Diagram explanation:**
+- Client → sends request → Classic Load Balancer (CLB) → forwards to EC2 instance
+- CLB simply routes traffic without advanced routing logic
+
+---
+
+## Application Load Balancer (v2)
+
+### Features
+- ALB works at **Layer 7** (HTTP/HTTPS)
+- Can route traffic to **multiple applications** (Target Groups)
+- Can route to **multiple apps on same machine** (containers)
+- Supports **HTTP/2** and **WebSocket**
+- Supports **redirects** (ex: HTTP ➝ HTTPS)
+
+### ALB Routing Details
+- Routes based on **URL path** (`/users`, `/posts`)
+- Routes based on **hostname** (`one.example.com`, `other.example.com`)
+- Routes based on **query string / headers** (`?id=123&order=false`)
+- Ideal for **microservices** and **containerized apps** (ECS/Docker)
+- Supports **port mapping** (useful with ECS dynamic ports)
+- One ALB can replace **multiple Classic LBs**
+
+### HTTP Based Traffic
+- ALB routes HTTP traffic to different target groups
+- Each target group can have multiple EC2 instances
+- Each target group has its own health checks
+
+**Example:**
+- `/user` route → Target Group A
+- `/search` route → Target Group B
+
+---
+
+## Target Groups (v2)
+
+**Targets can be:**
+- EC2 instances
+- ECS tasks
+- Lambda functions
+- Private IPs
+
+**Features:**
+- ALB supports multiple target groups
+- Health checks run per target group
+
+---
+
+## Query Strings / Parameter-Based Routing
+
+Can route traffic based on URL parameters.
+
+**Example:**
+- `?Platform=Mobile` vs `?Platform=Desktop`
+
+**Routing:**
+- `?Platform=Mobile` → EC2 Target Group
+- `?Platform=Desktop` → Private IP Target Group (On-premise)
+
+---
+
+## ALB (v2) – Good to Know
+
+- Uses a fixed AWS DNS hostname (`xxx.region.elb.amazonaws.com`)
+- Backend servers don't see client's real IP directly
+- Client IP is passed using headers:
+  - `X-Forwarded-For` (Client IP)
+  - `X-Forwarded-Port`
+  - `X-Forwarded-Proto`
+
+**Flow:**
+Client → ALB terminates connection → forwards to EC2 instance
+
+ALB inserts original client IP into headers so backend can still track user identity.
+
+---
+
+## Network Load Balancer (v2)
+
+### Features
+- NLB operates at **Layer 4** (TCP/UDP)
+- Forwards traffic directly to instances
+- Designed for handling **millions of requests per second** with **ultra-low latency**
+- Provides **one static IP per Availability Zone**
+- Supports **Elastic IPs**
+- Best used for **extreme performance** and TCP/UDP-based traffic
+
+### TCP (Layer 4) Based Traffic
+- Users (WWW) send TCP traffic to the External NLB
+- NLB routes traffic to different Target Groups based on port/protocol
+- Each Target Group contains EC2 instances and performs health checks
+
+### Target Groups
+**Target Groups can contain:**
+- EC2 instances
+- Private IP addresses
+- Another Load Balancer (ALB)
+
+**Health checks support:** TCP, HTTP, and HTTPS protocols
+
+---
+
+## Gateway Load Balancer (GWLB)
+
+### Features
+- Used to deploy and scale **3rd-party network security appliances** on AWS
+- Works at **Layer 3** (Network Layer)
+- Handles **IP packet inspection**
+- Combines **gateway + load balancing** in one service
+- Uses **GENEVE protocol** (port 6081) for traffic encapsulation
+
+### Flow
+User traffic → VPC route table → Gateway Load Balancer
+→ Target group of security appliances (firewalls)
+→ After processing → Application
+
+
+### Target Groups
+Target groups can contain EC2 instances or private IP addresses.
+
+---
+
+## Sticky Sessions (Session Affinity)
+
+### Features
+- Ensures users always connect to the **same EC2 instance** for their session
+- Works for **CLB, ALB, and NLB**
+- Used to maintain **session state** (important for web apps)
+- Can cause **uneven traffic distribution** across instances
+
+### Cookie Names
+
+**Application-based cookies:**
+- **Custom cookie:** generated by the target/application
+- **Application cookie:** generated by the Load Balancer (`AWSALBAPP`)
+
+**Duration-based cookies:**
+- Generated by the Load Balancer:
+  - `AWSALB` for ALB
+  - `AWSELB` for CLB
+
+---
+
+## Cross-Zone Load Balancing
+
+### With Cross-Zone Load Balancing
+- Each load balancer instance distributes traffic **evenly across all registered instances** in all AZs
+- Even if different AZs have different number of EC2 instances, traffic distribution is equal
+
+**Example:**
+- Total traffic = 100 requests (50 from each LB node)
+- Instances across both AZs receive equal load (10 each)
+
+### Without Cross-Zone Load Balancing
+- Each load balancer instance only distributes traffic to the instances **within its own AZ**
+- Creates uneven load distribution if instance counts differ
+
+**Example:**
+- AZ1 has 2 instances → each instance gets 25
+- AZ2 has many instances → each receives 6.25
+
+---
+
+## SSL / TLS – Basics
+
+- **SSL certificate** encrypts traffic between user and load balancer (in-flight encryption)
+- **SSL** = Secure Sockets Layer
+- **TLS** = Transport Layer Security (newer, more secure)
+- Today, TLS certs are used, but commonly called "SSL"
+- Certificates are issued by **Certificate Authorities** (e.g., GoDaddy, Digicert, Let's Encrypt)
+- Certificates **expire** and must be renewed
+
+---
+
+## Load Balancer – SSL Certificates
+
+- Load balancer uses an **X.509 certificate**
+- Certificates are managed using **ACM (AWS Certificate Manager)**
+- You can upload your own certificates
+- **HTTPS listeners** require a default certificate
+- Multiple certificates can be added (for multiple domains)
+- Clients use **SNI (Server Name Indication)** to select the right certificate
+
+**Flow:**
+User ↔ LB: HTTPS (encrypted)
+LB ↔ EC2: HTTP (within VPC)
+
+
+---
+
+## SNI (Server Name Indication)
+
+### Features
+- SNI enables hosting **multiple SSL certificates** on the same load balancer
+- Client sends the **hostname** during SSL handshake
+- Load balancer chooses the correct certificate based on hostname
+- Works only for **ALB, NLB, CloudFront**
+- ❌ Does **not work** for Classic Load Balancer (CLB)
+
+**Example:**
+Client requests www.mycorp.com
+→ ALB checks hostname and selects matching certificate
+→ Routes request to appropriate target group
+
+
+---
+
+## Elastic Load Balancers – SSL Certificates
+
+| Load Balancer | SSL Certificate Support |
+|---------------|------------------------|
+| CLB (v1) | Only 1 SSL certificate, multiple CLBs needed per domain |
+| ALB (v2) | Multiple certificates, requires SNI |
+| NLB (v2) | Multiple certificates, requires SNI |
+
+---
+
+## Connection Draining / Deregistration Delay
+
+### What it does
+- CLB calls it **Connection Draining**
+- ALB/NLB call it **Deregistration Delay**
+- Allows **in-flight requests to complete** while instance is being removed
+- Prevents new requests from going to deregistering/unhealthy instance
+
+### Configuration
+- Can be set between **1–3600 seconds** (default: 300s)
+- Can be **disabled** (set to 0)
+- Use **lower value** if your application has short requests
+
+**Flow:**
+When an instance is set to be removed:
+→ Existing connections are allowed to finish (Draining state)
+→ New traffic goes to remaining healthy instances
+
+
+---
+
+# Auto Scaling Group (ASG)
+
+## What's an Auto Scaling Group?
+
+ASG automatically adjusts the number of EC2 instances based on demand.
+
+### Key Points
+- In real life, **system load constantly changes**
+- In the cloud, servers can be **created or removed quickly**
+- ASG **scales out** (adds EC2 instances) when load increases
+- ASG **scales in** (removes EC2 instances) when load decreases
+- Maintains **minimum and maximum** number of EC2 instances
+- Automatically **registers new instances** with the load balancer
+- **Recreates unhealthy instances** automatically
+- ASG itself is **free** — you only pay for EC2 instances used
+
+---
+
+## Auto Scaling Group Capacity Terms
+
+| Term | Description |
+|------|-------------|
+| **Minimum capacity** | The least number of instances always running |
+| **Desired capacity** | The target number of instances ASG tries to maintain |
+| **Maximum capacity** | The highest allowable number of instances |
+
+---
+
+## ASG with Load Balancer
+
+**Flow:**
+Users → Elastic Load Balancer (ELB)
+→ Auto Scaling Group
+→ EC2 Instances
+
+
+- ELB distributes traffic across EC2 instances in the ASG
+- ELB checks the health of EC2 instances
+- Routes traffic only to **healthy instances**
+
+---
+
+## Auto Scaling Group Attributes
+
+### Launch Template
+ASG uses a **launch template** to create new EC2 instances.
+
+**Launch Template contains:**
+- AMI
+- Instance type
+- EBS volumes
+- Security groups
+- SSH key pair
+- IAM role
+- Subnet/network
+- Load balancer info
+
+**Note:** Launch configurations are **deprecated** (Launch templates replace them)
+
+**Also define:**
+- Min / Max / Initial instance capacity
+- Scaling policies
+
+---
+
+## Auto Scaling – CloudWatch Alarms & Scaling
+
+### How it works
+- ASG can scale using **CloudWatch alarms**
+- Alarm monitors metrics like **Average CPU** or **custom metric**
+- Average metrics are calculated across **all instances** in the ASG
+- **Scale-out policy** → increases instances
+- **Scale-in policy** → decreases instances
+
+**Flow:**
+CloudWatch alarm monitors metrics
+→ Signals ASG to add/remove instances
+
+
+---
+
+## Auto Scaling Groups – Scaling Policies
+
+### Dynamic Scaling
+- **Target tracking:** maintain metric at a target level (e.g., CPU = 40%)
+- **Simple/Step scaling:** respond with fixed steps (e.g., add 2 instances on >70% CPU)
+
+### Scheduled Scaling
+- Pre-planned scaling based on **predictable usage patterns**
+
+---
+
+## Good Metrics to Scale On
+
+| Metric | Description |
+|--------|-------------|
+| **CPUUtilization** | Average CPU usage across EC2 instances |
+| **RequestCountPerTarget** | Ensures request load remains balanced |
+| **Average Network In/Out** | Useful when network traffic is the bottleneck |
+| **Custom metrics** | Can be used (via CloudWatch) |
+
+---
+
+## Scaling Cooldowns
+
+### What it does
+- After scaling activity, **cooldown period** begins (default 300 seconds)
+- During cooldown, ASG won't launch/terminate instances to **stabilize metrics**
+- Using a **ready AMI** reduces launch time and cooldown duration
+
+**Logic:**
+Scaling event occurs
+→ Cooldown period starts
+→ Ignore new scaling requests temporarily
+→ Allow metrics to stabilize
+
+
+---
+
+## Summary
+
+✅ **Scalability** = Vertical (bigger instances) + Horizontal (more instances)  
+✅ **High Availability** = Multi-AZ deployment  
+✅ **Load Balancers** = Distribute traffic, handle failures, SSL termination  
+✅ **Auto Scaling Groups** = Automatically adjust capacity based on demand  
+✅ **Health Checks** = Ensure traffic only goes to healthy instances  
+✅ **Sticky Sessions** = Keep users connected to the same instance  
+✅ **Cross-Zone Load Balancing** = Distribute traffic evenly across all AZs  
+✅ **SNI** = Multiple SSL certificates on one load balancer  
+✅ **Connection Draining** = Complete in-flight requests before removing instance  
+
+---
+
+**📝 Note:** This content is optimized for AWS Solutions Architect certification exam preparation.
