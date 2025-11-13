@@ -1,0 +1,702 @@
+# What is DNS?
+
+## Overview
+
+**DNS** stands for **Domain Name System**, and it acts like the **phonebook of the internet**.
+
+- We humans remember names easily (like `google.com`)
+- But computers only understand IP addresses (like `172.217.18.36`)
+- DNS translates these user-friendly names into machine-readable IPs
+
+### Example
+
+When you enter `www.google.com` in your browser, DNS returns the IP address `172.217.18.36`, and your browser connects to that IP.
+
+### Why DNS Matters
+
+DNS is considered the **backbone of the internet** because almost everything connected to the internet depends on DNS to locate servers.
+
+## DNS Hierarchical Structure
+
+DNS follows a **hierarchical naming structure**, similar to tree-like layers:
+
+.com                     (Top Level Domain - TLD)
+example.com              (Second Level Domain - SLD)
+www.example.com          (Host / website)
+api.example.com          (Subdomain)
+
+# DNS Terminologies
+
+## Domain Registrar
+
+A company from which you **purchase your domain name**.
+
+**Examples:** Amazon Route 53, GoDaddy, Namecheap
+
+## DNS Records
+
+Entries stored in DNS that define how your domain should behave.
+
+### Common types include:
+
+- **A record** → maps domain → IPv4 address
+- **AAAA record** → maps domain → IPv6 address
+- **CNAME** → maps one domain to another domain
+- **NS record** → specifies the DNS name servers for a domain
+
+## Zone File
+
+A file stored in DNS servers that contains all DNS records for a domain.
+
+## Name Server
+
+A server responsible for responding to DNS queries.
+
+It can be:
+- **Authoritative** → owns the DNS records
+- **Non-Authoritative** → only fetches records (resolver)
+
+## Domain Hierarchy Terminology
+
+- **TLD (Top Level Domain)** → `.com`, `.org`, `.gov`, `.us`, `.in`
+- **SLD (Second Level Domain)** → `amazon.com`, `google.com` (TLD + name)
+
+### Diagram Explanation
+
+The diagram shows:
+- A URL broken into components like protocol, subdomain, SLD, and TLD
+- Shows the root zone (the invisible `.` after `.com`)
+- Shows that combining everything forms **FQDN (Fully Qualified Domain Name)**
+
+### Example FQDN
+
+api.www.example.com.
+
+The invisible dot at the end is the **root DNS level**.
+
+# How DNS Works
+
+This explains the **DNS resolution process** — how a domain name gets converted into an IP address.
+
+## Step-by-Step Flow
+
+1. User types `example.com` in the browser
+2. Browser checks its **local cache** — if record exists from earlier, DNS lookup ends here
+3. If not found, query goes to **Local DNS Server** (ISP/company DNS)
+4. Local DNS server asks **Root DNS Server**:
+   - "Where can I find `.com` domain details?"
+   - Root DNS replies with the **TLD DNS Server** for `.com`
+5. Local DNS server sends request to **TLD DNS Server**
+   - TLD replies with the **SLD (authoritative) DNS server** information
+6. **SLD DNS server** contains the actual DNS records and returns the IP address
+7. Local DNS server **caches the response** (for future lookups), and returns the IP to the browser
+8. Browser connects to the web server using the IP
+
+**⚡ This process happens in milliseconds.**
+
+# Amazon Route 53
+
+Route 53 is AWS's DNS service.
+
+## Key Characteristics
+
+- **Highly available and scalable** — built globally across multiple AWS locations
+- **Authoritative DNS** — means you control DNS records
+- Also acts as a **Domain Registrar** — you can purchase domains directly from AWS
+- Supports **health checks** — routes traffic only to healthy endpoints
+- **Only AWS service with 100% availability SLA**
+- Name "Route 53" references the **DNS port 53**
+
+### Diagram Flow
+
+Client queries example.com DNS → Route 53 resolves it → Returns IP of EC2 instance → Client connects to server using that IP
+
+## Route 53 – Records
+
+A DNS record defines how traffic should be routed for a domain.
+
+### Every DNS Record Contains
+
+| Component | Description |
+|-----------|-------------|
+| **Domain/Subdomain name** | e.g., `example.com` |
+| **Record type** | A, AAAA, CNAME, NS, etc. |
+| **Value** | IP address or domain name depending on record type |
+| **Routing Policy** | How Route 53 should respond to DNS queries |
+| **TTL (Time to Live)** | How long resolvers should cache the record |
+
+### Supported Record Types
+
+- **A** → maps to IPv4
+- **AAAA** → maps to IPv6
+- **CNAME** → alias one domain to another
+- **NS** → delegates DNS to a name server
+
+Advanced types exist (MX, TXT, SPF, SOA, etc.) but are not required for basics.
+
+## Route 53: Hosted Zones
+
+A **hosted zone** in Route 53 is a container for DNS records that defines how traffic is routed for a specific domain and its subdomains.
+
+### Types of Hosted Zones
+
+#### Public Hosted Zones
+
+These contain DNS records that route traffic over the internet for publicly accessible domain names.
+
+**Example:** `application1.mypublicdomain.com` routes users from the internet to public resources like websites.
+
+#### Private Hosted Zones
+
+These define how DNS traffic is routed within one or more Amazon VPCs for private domain names not exposed to the internet.
+
+**Example:** `application1.company.internal` routes traffic only within the organization's internal network.
+
+### Cost
+
+Each hosted zone costs **$0.50 per month**.
+
+**💡 One-liner:** "Hosted zones are containers for DNS records – Public zones for internet routing and Private zones for internal VPC routing."
+
+## Route 53: Public vs. Private Hosted Zones
+
+### Public Hosted Zone (Left Side)
+
+A client queries `example.com` (public domain). The public hosted zone returns the public IP address (e.g., `54.22.33.44`) which routes traffic to AWS resources like:
+
+- S3 Bucket (static site)
+- Amazon CloudFront (CDN)
+- EC2 Instance with a public IP
+- Application Load Balancer (exposed publicly)
+
+This enables external users to reach your website or application via the internet.
+
+### Private Hosted Zone (Right Side)
+
+The DNS queries (like `api.example.internal` or `db.example.internal`) resolve only inside a VPC.
+
+- EC2 instances communicate with each other using private IPs (10.0.0.10, 10.0.0.35)
+- The DNS resolution is managed by Route 53 inside the VPC
+- External clients cannot access these internal domains
+- This setup is ideal for internal services, such as databases or internal APIs
+
+**💡 One-liner:** "Public zones route internet traffic; private zones handle internal VPC-only DNS queries."
+
+## Route 53: Records TTL (Time To Live)
+
+**TTL (Time To Live)** defines how long a DNS resolver or client caches a DNS response before requesting it again from Route 53.
+
+### High TTL (e.g., 24 hours)
+
+- ✅ Results in less DNS traffic to Route 53 (cost-efficient)
+- ❌ However, changes to records take longer to propagate, potentially leading to outdated DNS entries
+
+### Low TTL (e.g., 60 seconds)
+
+- ❌ More frequent DNS lookups, leading to higher Route 53 query costs
+- ✅ Faster propagation of DNS changes, meaning updates (like failovers or migrations) are reflected quickly
+- ✅ Easier to update records dynamically
+
+### Mandatory TTL
+
+Every DNS record (except Alias records) requires a TTL value. Alias records are automatically managed by AWS.
+
+### Diagram Explanation
+
+The diagram shows a client querying Route 53 for `myapp.example.com`. Route 53 responds with the IP address and TTL. The client caches this record for the duration of the TTL, sending HTTP requests directly to the web server until the cache expires.
+
+**💡 One-liner:** "TTL controls DNS caching time—high TTL = stability, low TTL = faster updates but more cost."
+
+## CNAME vs Alias
+
+AWS resources like Load Balancers or CloudFront expose hostnames such as `lb1-1234.us-east-2.elb.amazonaws.com`, but users often prefer custom domains like `myapp.mydomain.com`.
+
+### CNAME (Canonical Name) Records
+
+- Used to point one hostname to another (e.g., `app.mydomain.com` → `blabla.anything.com`)
+- ❌ Only works for **non-root domains** (e.g., `something.mydomain.com`, not `mydomain.com`)
+
+### Alias Records
+
+- AWS-specific extension that allows mapping directly to AWS resources (e.g., `app.mydomain.com` → `lb1-1234.us-east-2.elb.amazonaws.com`)
+- ✅ Works for **both root** (`mydomain.com`) and non-root domains
+- ✅ Free of charge (no extra DNS query fees)
+- ✅ Includes native health checks that automatically detect unhealthy endpoints
+
+**💡 One-liner:** "CNAME works only for subdomains; Alias works for both root and subdomains, free and AWS-integrated."
+
+## Route 53: Alias Records
+
+Alias records extend DNS by mapping a domain name to an AWS resource (like an ELB, CloudFront distribution, S3 static website, etc.).
+
+### Key Features
+
+- Alias records **automatically track changes** in the AWS resource's IP addresses—if an ELB changes its IP, the Alias record stays valid
+- Unlike CNAME: Alias records can be used at the **root level (zone apex)** like `example.com`
+- Alias records are always of type **A (IPv4)** or **AAAA (IPv6)**, depending on the AWS resource type
+- AWS manages TTL automatically—you **cannot set TTL** for Alias records
+
+### Diagram Explanation
+
+The diagram shows an Alias Record for `example.com` of type A, which points to an Application Load Balancer (`MyALB-123456789.us-east-1.elb.amazonaws.com`).
+
+When users query `example.com`, Route 53 automatically routes them to the current IP of the ALB. If the IP changes, Route 53 updates it automatically since the ALB is AWS-managed.
+
+**💡 One-liner:** "Alias records map domains to AWS resources, support root domains, auto-update IPs, and don't need TTL."
+
+## Route 53: Alias Record Targets
+
+Amazon Route 53 supports Alias records, which are similar to CNAMEs but work at the root domain level (e.g., `example.com`). Alias records map a domain directly to certain AWS resources without extra DNS lookups, and they are **free of charge**.
+
+### Supported Alias Record Targets
+
+- ✅ **Elastic Load Balancers (ELB)** – Automatically resolve to the load balancer's IP
+- ✅ **CloudFront Distributions** – Map custom domains to CloudFront
+- ✅ **API Gateway** – Used to expose REST APIs under a custom domain
+- ✅ **Elastic Beanstalk environments** – Simplifies mapping environments to domains
+- ✅ **S3 Websites** – Point domain names to static website buckets
+- ✅ **VPC Interface Endpoints** – Use DNS resolution for private connections
+- ✅ **Global Accelerator** – Route traffic through AWS edge locations
+- ✅ **Route 53 Record in the same hosted zone** – Alias can point to another record within the same zone
+
+### Not Supported
+
+❌ Alias records **cannot** point directly to EC2 instance public DNS names.
+
+## Route 53: Routing Policies
+
+Routing policies define how Route 53 **responds to DNS queries** — not how traffic is routed. Route 53 only gives out IP addresses; it doesn't move traffic like a load balancer.
+
+### Supported Routing Policies
+
+- **Simple** – Default; one or more static records returned randomly
+- **Weighted** – Traffic distributed based on configured weights
+- **Failover** – Directs to backup resource when primary fails
+- **Latency-based** – Routes to resource with the lowest latency
+- **Geolocation** – Routes users based on their location
+- **Multi-Value Answer** – Returns multiple healthy records for basic load balancing
+- **Geoproximity** – Uses Route 53 Traffic Flow to route by distance or bias
+
+**💡 Key Points:**
+- Routing policies decide how DNS queries are answered
+- Route 53 doesn't route traffic — only provides IPs
+- Supports Simple, Weighted, Failover, Latency, Geolocation, Multi-Value, and Geoproximity
+
+## Routing Policy: Simple
+
+The Simple Routing Policy maps a domain to a single resource (like an IP or ELB).
+
+If multiple IPs are listed, Route 53 returns all, and the client randomly picks one.
+
+It cannot use health checks and only allows one target per alias record.
+
+### Diagram Explanation
+
+**Single Value:** Client queries `foo.example.com`, Route 53 returns one IP (e.g., `11.22.33.44`)
+
+**Multiple Value:** Route 53 returns several IPs (e.g., `11.22.33.44`, `55.66.77.88`, etc.), and the client chooses one randomly
+
+**💡 Key Points:**
+- Used for routing to one resource
+- Clients randomly choose between multiple returned IPs
+- Alias can point to one AWS resource only
+- No health check support
+
+## Routing Policy: Weighted
+
+Weighted routing controls the percentage of traffic sent to each endpoint.
+
+Each record gets a weight, and Route 53 distributes DNS responses based on the ratio of each record's weight to the total.
+
+### Formula
+
+Traffic % = (Weight for a record / Sum of all record weights)
+
+### Key Features
+
+- Weights don't need to total 100
+- You can assign a weight of **0** to stop sending traffic to a resource (useful for testing)
+- Weighted routing supports health checks, enabling automatic DNS failover
+
+### Diagram Explanation
+
+Three resources shown with arrows of varying thickness:
+- One gets 70% traffic, one 20%, and one 10%, based on their assigned weights
+
+**💡 Key Points:**
+- Controls traffic distribution using weights
+- Ideal for load balancing or testing new app versions
+- Weight 0 stops sending traffic to a resource
+- Works with health checks
+
+## Routing Policy: Latency-based
+
+Latency-based routing directs users to the AWS region that provides the lowest network latency for them.
+
+### Key Features
+
+- Latency is measured based on the performance between AWS regions and users
+- Even users in Europe may connect to a U.S. region if it's faster
+- Latency-based routing can also integrate with health checks for failover capability
+
+### Diagram Explanation
+
+Shows users in different parts of the world connecting to the nearest (or lowest latency) ALB — either in us-east-1 or ap-southeast-1.
+
+**💡 Key Points:**
+- Routes users to the AWS region with the lowest latency
+- Prioritizes performance for end-users
+- Can integrate with health checks for redundancy
+
+## Route 53: Health Checks
+
+Health checks monitor the health of resources and enable automated DNS failover.
+
+### Key Features
+
+- They are **only available for public resources** (accessible over the internet)
+- There are **3 main types** of health checks:
+  - **Endpoint health checks** – Monitor endpoints (servers, ELBs, APIs)
+  - **Calculated health checks** – Combine results from other health checks
+  - **CloudWatch alarm-based checks** – Monitor metrics like throttles or alarms on DynamoDB, RDS, etc.
+
+When a health check fails, Route 53 automatically routes traffic to the backup (failover).
+
+Health checks also publish metrics to CloudWatch for monitoring.
+
+### Diagram Explanation
+
+Route 53 monitors two ALBs in us-east-1 and eu-west-1. If one fails, DNS automatically fails over to the healthy region using health checks.
+
+**💡 Key Points:**
+- Health checks enable automatic DNS failover
+- Types: endpoint, calculated, and CloudWatch alarm-based
+- Integrated with CloudWatch metrics
+
+## Health Checks: Monitor an Endpoint
+
+Route 53 uses around **15 global health checkers** to test endpoint health.
+
+If more than **18%** of checkers report healthy, the endpoint is marked as healthy.
+
+### Defaults and Details
+
+- **Threshold:** 3 (must fail/succeed 3 times)
+- **Interval:** 30 seconds (can reduce to 10s at higher cost)
+- **Supports:** HTTP, HTTPS, and TCP
+- Health checks pass only when **2xx or 3xx** codes are returned
+- You can validate health by checking content within the first **5120 bytes** of the response
+- Must allow incoming requests from Route 53 health checker IPs (published at `https://ip-ranges.amazonaws.com/ip-ranges.json`)
+
+### Diagram Explanation
+
+Health checkers from us-east-1, us-west-1, and sa-east-1 send HTTP requests to the ALB in eu-west-1.
+
+The ALB returns HTTP 200, confirming health. The ALB must allow health checker IPs through the firewall.
+
+**💡 Key Points:**
+- 15 global checkers monitor endpoint health
+- Protocols: HTTP, HTTPS, TCP
+- Default threshold 3, interval 30s
+- Marks healthy if >18% checkers report success
+- Allow Route 53 health checker IPs through firewalls
+
+## Route 53 – Calculated Health Checks
+
+Calculated Health Checks in Route 53 allow you to combine the results of multiple individual (child) health checks into one parent health check. This is useful when you want to monitor an application composed of multiple components or endpoints and decide the overall status based on combined logic.
+
+### Logical Operators
+
+You can use logical operators such as **OR**, **AND**, and **NOT** to determine how the results of child checks affect the parent check.
+
+For instance:
+- Using **AND** means the parent passes only if all child checks are healthy
+- Using **OR** means it passes if at least one child check is healthy
+- **NOT** can invert a result — marking healthy as unhealthy or vice versa
+
+### Features
+
+- A single calculated health check can include up to **256 child health checks**
+- You can also specify how many child checks need to pass for the parent to be considered healthy, allowing flexible tolerance levels
+
+### Use Case
+
+This feature is especially useful when performing maintenance on part of your infrastructure. For example, if one endpoint is down for updates, you can keep the parent check passing as long as the other endpoints are still healthy, ensuring your DNS failover does not unnecessarily trigger.
+
+### Diagram Explanation
+
+The diagram shows Route 53 at the top with a Parent Health Check monitoring three Child Health Checks, each linked to separate EC2 instances. The parent combines their results (using AND/OR logic) to determine the final status.
+
+**💡 Takeaway:** Combine multiple health checks into a single parent using OR/AND/NOT logic to tolerate maintenance or partial failures without triggering failover.
+
+## Health Checks – Private Hosted Zones
+
+Route 53 health checkers are located **outside the AWS VPC**, meaning they cannot directly access private endpoints such as resources within private subnets or on-premises environments.
+
+This creates a limitation because Route 53 cannot check the health of private IPs directly.
+
+### Solution: Use CloudWatch
+
+To monitor private resources, you can use Amazon CloudWatch as an intermediary.
+
+You do this by:
+1. Creating a **CloudWatch Metric** to track the private endpoint's health
+2. Setting up a **CloudWatch Alarm** that triggers based on that metric (for example, if CPU utilization is too high or the instance stops responding)
+3. Creating a **Route 53 Health Check** that monitors the CloudWatch Alarm status instead of the private resource directly
+
+This method allows Route 53 to make DNS failover decisions based on CloudWatch data without requiring direct network access to the resource.
+
+### Diagram Explanation
+
+The image shows a Health Checker in us-east-1 located outside the VPC. Inside the VPC, a T2 instance (private endpoint) runs in a Private Subnet. Since the health checker cannot reach it directly, the instance reports metrics to CloudWatch, which raises a CloudWatch Alarm. The Route 53 health checker then monitors the alarm's state.
+
+**💡 Takeaway:** Route 53 can't check private endpoints directly, so use CloudWatch Alarms to represent their health for DNS failover decisions.
+
+## Routing Policies – Failover (Active–Passive)
+
+The Failover Routing Policy in Route 53 enables high availability through an **Active–Passive** setup.
+
+### How It Works
+
+In this setup, there are two records:
+- A **Primary (Active)** resource that handles all traffic under normal conditions
+- A **Secondary (Passive)** resource that remains idle and only becomes active when the primary fails
+
+A **Health Check** is mandatory for the primary endpoint.
+
+If Route 53 detects that the primary resource is unhealthy (based on the health check), it automatically routes DNS queries to the secondary (disaster recovery) resource.
+
+This mechanism ensures automatic DNS-level failover without requiring manual intervention. It's widely used for disaster recovery, backup servers, and multi-region redundancy.
+
+### Diagram Explanation
+
+The diagram depicts a client sending DNS requests to Amazon Route 53, which checks the health of a Primary EC2 Instance. If the health check fails, Route 53 redirects DNS responses to a Secondary EC2 Instance (disaster recovery site).
+
+**💡 Takeaway:** Failover routing provides automatic DNS-level switch from a primary to a standby resource when health checks detect failure.
+
+## Routing Policies – Geolocation
+
+Geolocation Routing differs from latency-based routing — it makes routing decisions based on the **physical location of the user**, not latency or network performance.
+
+### How It Works
+
+- You can define DNS responses by **continent**, **country**, or **U.S. state**
+- When multiple rules overlap, Route 53 uses the **most specific location** (e.g., state over country, country over continent)
+- A best practice is to create a **"Default" record**, which acts as a fallback if a user's location doesn't match any defined region
+
+### Use Cases
+
+Geolocation routing is often used for:
+- Website localization (showing region-specific content or languages)
+- Compliance (directing users to a local server for data sovereignty)
+- Content restriction
+- Regional load balancing
+
+It can also be associated with health checks for reliability.
+
+### Diagram Explanation
+
+A map of Europe shows France, Germany, Luxembourg, and nearby countries highlighted in blue, configured to resolve to IPs like `11.22.33.44` and `55.66.77.88`. Other areas (gray region) fall back to a Default record with IP `99.11.22.33`. Users from France, for instance, get localized routing, while others receive the default route.
+
+**💡 Takeaway:** Geolocation routing directs users based on their physical location and uses a Default record as fallback for unmatched areas.
+
+## Routing Policies – Geoproximity
+
+### Core Concept
+
+Geoproximity routing directs traffic to resources based on the **geographic location of users and resources**. It minimizes latency by routing users to the nearest endpoint.
+
+### Bias Mechanism
+
+**Bias** adjusts the effective geographic region for a resource, shifting traffic distribution:
+- **Positive bias (1 to 99):** Expands the region, making the resource appear closer to more users, increasing traffic
+- **Negative bias (-1 to -99):** Shrinks the region, making the resource appear farther, reducing traffic
+
+### Resource Types
+
+- **AWS resources:** Specify the AWS region (e.g., us-east-1, us-west-1)
+- **Non-AWS resources:** Specify latitude and longitude
+
+### Requirement
+
+Requires **Route 53 Traffic Flow**; geoproximity routing is not available as a standalone policy.
+
+### Visual Diagram Explanation
+
+The diagrams show a US map divided by a vertical orange line into eastern and western regions.
+
+**Western region:**
+- Data center: us-west-1 with Bias: 0 (southwestern US)
+- Users: Two users in the western half
+- Routing: Both users connect to us-west-1 via blue lines, demonstrating proximity-based routing
+
+**Eastern region:**
+- Data center: us-east-1 with Bias: 0 (southeastern US)
+- Users: Two users in the eastern half
+- Routing: Both users connect to us-east-1 via blue lines
+
+**Bias setting:** Both data centers show "Bias: 0", meaning no artificial weighting is purely geographic.
+
+## Routing Policies – IP-based Routing
+
+IP-based routing uses the **client's source IP** to choose the endpoint. You define CIDR blocks and map each to an endpoint/location.
+
+### Use Cases
+
+- Performance optimization
+- Cost reduction
+- Example: routing users from a specific ISP to a dedicated endpoint
+
+### How It Works (Diagram)
+
+1. Users A (203.0.113.56) and B (200.5.4.100) query Route 53
+2. Route 53 checks a CIDR collection:
+   - 203.0.113.0/24 → location-1
+   - 200.5.4.0/24 → location-2
+3. User A matches location-1; User B matches location-2
+4. Route 53 returns the record for that location:
+   - location-1 → example.com → 1.2.3.4
+   - location-2 → example.com → 5.6.7.8
+5. Users are directed to the corresponding EC2 instance
+
+## Routing Policies – Multi-Value
+
+Multi-Value returns **multiple resource records** (up to 8 healthy) per query, letting the client choose.
+
+### Features
+
+- It can be combined with **health checks** so only healthy resources are returned, improving fault tolerance
+- It is **not a substitute for an ELB**, which provides load balancing, session stickiness, SSL termination, and active traffic management
+
+### Example Configuration (Table)
+
+Three A records for `www.example.com`:
+
+| IP Address | Set ID | Health Check |
+|------------|--------|--------------|
+| 192.0.2.2 | Web1 | A |
+| 198.51.100.2 | Web2 | B |
+| 203.0.113.2 | Web3 | C |
+
+Each has TTL 60 and its own health check. If a health check fails, that IP is excluded from responses.
+
+## Domain Registrar vs. DNS Service
+
+A **domain registrar** (e.g., GoDaddy, Amazon Registrar) handles domain registration and annual fees. They typically provide a default DNS service, but you can use a **different DNS service** (e.g., Route 53) to manage DNS records.
+
+### Example (Diagram)
+
+- Purchase `example.com` from **GoDaddy** (registrar)
+- Manage DNS records via **Amazon Route 53** (DNS service)
+
+This separation allows using specialized DNS services while keeping registration with your preferred registrar.
+
+## GoDaddy with Route 53 Setup
+
+This shows a live setup where GoDaddy is the registrar and Route 53 is the DNS service for `stephanetheteacher.com`.
+
+### GoDaddy Side
+
+- Shows "We can't display your DNS information because your nameservers aren't managed by us."
+- Custom nameservers configured:
+  - ns-1083.awsdns-07.org
+  - ns-932.awsdns-52.net
+  - ns-1911.awsdns-46.co.uk
+  - ns-481.awsdns-60.com
+
+### Route 53 Side
+
+- Public Hosted Zone for `stephanetheteacher.com`
+- Hosted Zone ID: Z30IUJCCWPKZUV
+- Type: Public hosted zone
+- Record count: 22
+- Name servers:
+  - ns-252.awsdns-31.com
+  - ns-1468.awsdns-55.org
+  - ns-633.awsdns-15.net
+  - ns-1800.awsdns-33.co.uk
+
+The arrows indicate that the Route 53 nameservers are configured at GoDaddy to delegate DNS to Route 53.
+
+## 3rd Party Registrar with Amazon Route 53
+
+You can use Route 53 as your DNS service even if you register the domain with a third-party registrar.
+
+### Steps
+
+1. Create a **Public Hosted Zone** in Route 53 for your domain
+2. Update the **NS records** at your registrar to point to the Route 53 nameservers
+
+### Key Concept
+
+- **Domain Registrar ≠ DNS Service provider**
+- Registrars often include basic DNS, but you can use a separate DNS service
+
+This enables using Route 53 features (health checks, routing policies, etc.) regardless of where the domain is registered.
+
+## Route 53 – Hybrid DNS
+
+Route 53 Resolver handles DNS queries for:
+- Local EC2 domain names (e.g., `ip-10-0-0-1.ec2.internal`)
+- Records in Private Hosted Zones
+- Public domain names (by forwarding to public name servers)
+
+### Hybrid DNS
+
+Hybrid DNS enables DNS resolution between a VPC (Route 53 Resolver) and other networks (other DNS resolvers), including:
+- The VPC itself or peered VPCs
+- On-premises networks connected via Direct Connect or AWS VPN
+
+### Diagram Flow
+
+- Region contains a VPC with Route 53 Resolver, a Private Hosted Zone, and an EC2 instance
+- The resolver queries the Private Hosted Zone for VPC resources
+- For public domains, the resolver forwards to Public Name Servers
+- Hybrid DNS extends this to on-premises networks via VPN/Direct Connect
+
+## Resolver Endpoints (Inbound)
+
+An **Inbound Endpoint** lets on-premises DNS resolvers query AWS resources (e.g., EC2 instances) and records in Private Hosted Zones.
+
+### Diagram Flow
+
+1. **On-premises:** A server (web.onpremise.private) queries for `app.aws.private` via on-premises DNS resolvers
+2. **Connection:** VPN or Direct Connect links on-premises to AWS
+3. **AWS side:** The query reaches the Resolver Inbound Endpoint in the VPC
+4. **Resolution:** Route 53 Resolver looks up `app.aws.private` in the Private Hosted Zone (aws.private) and returns the EC2 instance IP
+
+This enables on-premises systems to resolve private AWS domain names.
+
+## Route 53 – Resolver Endpoints (Outbound)
+
+An **Outbound Endpoint** forwards DNS queries from AWS resources to your on-premises DNS resolvers.
+
+### Diagram Flow
+
+1. **AWS:** An EC2 instance (app.aws.private) queries for `web.onpremise.private`
+2. **Route 53 Resolver:** Since the domain isn't in the Private Hosted Zone (aws.private), it uses the Resolver Outbound Endpoint
+3. **Forwarding:** The Outbound Endpoint forwards the query over VPN/Direct Connect to on-premises DNS resolvers
+4. **Resolution:** On-premises resolvers resolve `web.onpremise.private` and return the IP
+5. **Response:** The IP is returned to the EC2 instance
+
+This enables AWS resources to resolve on-premises domain names.
+
+---
+
+## Summary
+
+| Topic | Key Points |
+|-------|------------|
+| **DNS Basics** | Translates domain names to IP addresses; hierarchical structure |
+| **Route 53** | AWS DNS service with 100% SLA, supports health checks |
+| **Hosted Zones** | Public (internet) and Private (VPC-only); $0.50/month |
+| **Record Types** | A, AAAA, CNAME, NS, Alias |
+| **TTL** | High TTL = less cost, Low TTL = faster updates |
+| **Alias vs CNAME** | Alias works for root domains and is free; CNAME only for subdomains |
+| **Routing Policies** | Simple, Weighted, Latency, Failover, Geolocation, Geoproximity, Multi-Value, IP-based |
+| **Health Checks** | Endpoint, Calculated, CloudWatch Alarm-based |
+| **Hybrid DNS** | Inbound/Outbound Resolver Endpoints for on-premises integration |
+
+---
+
+**📝 Note:** This content is optimized for AWS Solutions Architect certification exam preparation.
