@@ -1,0 +1,654 @@
+# SSH and Telnet - Complete Guide with Network Debugging
+
+## 1. SSH vs Telnet Overview
+
+### What is Telnet?
+Telnet is an unsecured connection protocol. All data including usernames and passwords is sent in plain text. Real-Life Example: Like sending a postcard - anyone can read it. Use Cases: Legacy systems only, internal isolated networks, basic network testing. Why Avoid: Highly vulnerable to eavesdropping and credential theft.
+
+### What is SSH?
+SSH (Secure Shell) is a secured connection protocol that encrypts all data. Real-Life Example: Like sending a sealed encrypted letter in a locked vault. Use Cases: Remote server administration, secure file transfer, port forwarding, automated tasks, version control.
+
+### Client and Server
+Client Package: Software on your local machine (like ssh command or PuTTY). Server Package: Software on remote machine (sshd daemon). How They Work: Client initiates connection → Server accepts → Secure communication.
+
+### Client-Server Diagram
+┌──────────┐ ┌──────────┐
+│ Server │ │ Client │
+│ sshd │◄─── SSH ──────────►│ ssh │
+└──────────┘ └──────────┘
+
+
+## 2. Telnet for Network Debugging
+
+### Why Use Telnet for Debugging?
+Excellent for testing network connectivity. Can connect to any TCP port. Shows if port is open or closed. Simple and available. Important: Use only for testing, never for actual access.
+
+### Basic Syntax
+telnet [hostname or IP] [port]
+
+### Common Debugging Scenarios
+
+Scenario 1: Check Web Server
+Command: telnet www.example.com 80
+Success Output: Connected to www.example.com.
+Failure Output: Connection refused
+
+Scenario 2: Check SSH Server
+Command: telnet 192.168.1.100 22
+Success Output: SSH-2.0-OpenSSH_7.4
+Failure Output: Connection refused
+
+Scenario 3: Check Database
+Command: telnet 192.168.1.50 3306
+Success Output: Connected
+Failure Output: Connection timed out
+
+Scenario 4: Check Email Server
+Command: telnet mail.example.com 25
+Success Output: 220 mail.example.com ESMTP Postfix
+Failure Output: Connection refused
+
+### Debugging Workflow
+Step 1: ping 192.168.1.100 (check if server online)
+Step 2: telnet 192.168.1.100 80 (check if port open)
+Step 3: curl http://192.168.1.100 (check if service responding)
+Step 4: firewall-cmd --list-all (check firewall rules)
+
+### Modern Alternatives
+nc -zv 192.168.1.100 80 (netcat)
+curl -I http://192.168.1.100 (curl)
+nmap -p 80 192.168.1.100 (nmap)
+
+## 3. SSH Configuration and Security
+
+### What is SSH?
+SSH stands for Secure Shell. Provides interface to Linux system. Takes commands and translates to kernel to manage hardware.
+
+### Linux System Architecture
+┌─────────────────┐
+│ Utilities │ (pwd, ls, cp, ssh)
+└─────────────────┘
+┌─────────────────┐
+│ Shell │ (bash, csh, ksh)
+└─────────────────┘
+┌─────────────────┐
+│ Kernel │ (Core OS)
+└─────────────────┘
+┌─────────────────┐
+│ Hardware │ (CPU, Memory, Disk)
+└─────────────────┘
+
+
+### OpenSSH Details
+OpenSSH is a package/software. Service daemon is sshd. SSH port number is 22 (default).
+
+### SSH Security Measures
+
+Measure 1: Configure Idle Timeout
+Purpose: Avoid unattended SSH sessions. Real-Life Example: Like auto-lock after inactivity.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Add: ClientAliveInterval 600
+4. Add: ClientAliveCountMax 0
+5. Restart: systemctl restart sshd
+Result: Auto-disconnect after 10 minutes idle.
+
+Measure 2: Disable Root Login
+Purpose: Prevent direct root login. Real-Life Example: Like removing master key from front door.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Change: PermitRootLogin no
+4. Restart: systemctl restart sshd
+Result: Must login as regular user, then use sudo.
+
+Measure 3: Disable Empty Passwords
+Purpose: Prevent login with empty passwords. Real-Life Example: Like requiring ID to enter.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Uncomment: PermitEmptyPasswords no
+4. Restart: systemctl restart sshd
+Result: Users with empty passwords cannot SSH.
+
+Measure 4: Limit Users SSH Access
+Purpose: Only allow specific users. Real-Life Example: Like guest list at party.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Add: AllowUsers user1 user2 admin
+4. Restart: systemctl restart sshd
+Result: Only specified users can SSH.
+
+Measure 5: Change Default Port
+Purpose: Reduce automated attacks. Real-Life Example: Like changing house address.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Change: Port 2222
+4. Restart: systemctl restart sshd
+5. Update firewall: firewall-cmd --permanent --add-port=2222/tcp
+6. Connect: ssh -p 2222 user@server
+Result: SSH runs on port 2222 instead of 22.
+
+## 4. SSH Key-Based Authentication
+
+### Why SSH Keys?
+Two reasons: Repetitive logins (faster than typing password), Automation through scripts (no human intervention needed).
+
+### Keys Generated at User Level
+Each user generates their own keys. Examples: User "iafzal" has own keys, User "root" has own keys. Provides individualized access control.
+
+### How SSH Keys Work
+Private Key: Keep secret on client (never share). Public Key: Share with servers (safe to share). Real-Life Example: Like unique lock and key system.
+
+### SSH Key Setup Diagram
+┌──────────────┐ ┌──────────────┐
+│ Client │ │ Server │
+│ │ │ │
+│ Step 1: │ │ │
+│ ssh-keygen │ │ │
+│ Creates: │ │ │
+│ - id_rsa │ │ │
+│ - id_rsa.pub │ │ │
+│ │ │ │
+│ Step 2: │ │ │
+│ ssh-copy-id │───────────────────►│ │
+│ root@server │ │ │
+│ │ │ │
+│ │ │ Public key │
+│ │ │ added to │
+│ │ │ authorized_ │
+│ │ │ keys │
+│ │ │ │
+│ Step 3: │ │ │
+│ ssh root@ │───────────────────►│ │
+│ server │ │ │
+│ │ │ │
+│ No password │ │ Authenticates│
+│ needed! │ │ with key │
+└──────────────┘ └──────────────┘
+
+
+### Step-by-Step Setup
+
+Step 1: Generate Keys on Client
+Command: ssh-keygen
+Location: ~/.ssh/id_rsa (private), ~/.ssh/id_rsa.pub (public)
+Real-Life Example: Like creating unique lock and key set.
+
+Step 2: Copy Public Key to Server
+Command: ssh-copy-id root@192.168.1.x
+What it does: Copies public key to server's ~/.ssh/authorized_keys
+First time: Will ask for password (only time needed)
+Real-Life Example: Like giving duplicate key to friend.
+
+Step 3: Login Without Password
+Command: ssh root@192.168.1.x
+Alternative: ssh -l root 192.168.1.x
+Result: Logs in automatically without password prompt
+Real-Life Example: Like using key to unlock door automatically.
+
+### Complete Example
+Client: MyFirstLinuxVM
+Server: LinuxCentOS7 at 192.168.1.100
+
+On Client:
+1. ssh-keygen (press Enter for defaults)
+2. ssh-copy-id root@192.168.1.100 (enter password once)
+3. ssh root@192.168.1.100 (no password needed!)
+
+Result: Passwordless SSH access configured.
+
+## 5. Summary
+
+Telnet: Unsecured, use only for network testing. SSH: Secured, use for all remote access. SSH Security: Idle timeout, disable root, disable empty passwords, limit users, change port. SSH Keys: Generate on client, copy to server, login without password. Use Cases: Automation, repetitive tasks, secure access.
+All commands and configurations provided above. Diagrams show the flow. Real-life examples help understand concepts.
+
+
+
+# SS Command - Complete Guide
+
+## Background: What is SS?
+
+SS (Socket Statistics) is a modern Linux utility used to display network socket statistics and information. It's a replacement for the older netstat command.
+
+History: netstat was the traditional tool for network statistics (part of net-tools package). ss was introduced as part of iproute2 package (modern networking tools). ss is faster and more efficient than netstat. ss provides more detailed information. netstat is deprecated in many modern Linux distributions.
+
+Why SS is Better: Faster execution (reads directly from kernel), More information available, Better filtering options, Actively maintained, Part of modern Linux toolset.
+
+Real-Life Analogy: Think of ss as a modern security camera system that shows you all the doors (ports) in your building, who's coming in/out (connections), and what's happening at each door (socket states). The old netstat is like an outdated camera system that's slower and shows less detail.
+
+---
+
+## Basic SS Command Syntax
+
+Basic Format: ss [options] [filter]
+
+Common Options:
+-t = TCP sockets
+-u = UDP sockets
+-l = Listening sockets only
+-n = Numeric addresses (don't resolve hostnames)
+-p = Show process information
+-a = All sockets (listening and established)
+-s = Summary statistics
+-4 = IPv4 only
+-6 = IPv6 only
+-e = Extended information
+-o = Timer information
+-i = Internal TCP information
+
+---
+
+## Common Use Cases
+
+### Use Case 1: List All Listening Ports
+
+Command: ss -tuln
+
+What it shows: -t = TCP connections, -u = UDP connections, -l = Only listening ports, -n = Show IPs instead of hostnames
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port  Peer Address:Port
+LISTEN     0      128    0.0.0.0:22          0.0.0.0:*
+LISTEN     0      100    127.0.0.1:3306      0.0.0.0:*
+LISTEN     0      128    0.0.0.0:80          0.0.0.0:*
+LISTEN     0      128    0.0.0.0:443         0.0.0.0:*
+
+Real-World Scenario: You want to see which services are running and accepting connections on your server. This shows port 22 (SSH), 3306 (MySQL), 80 (HTTP), and 443 (HTTPS) are listening.
+
+Interpretation: 0.0.0.0:22 = SSH listening on all interfaces port 22, 127.0.0.1:3306 = MySQL only listening on localhost port 3306, 0.0.0.0:80 = Web server listening on all interfaces port 80
+
+---
+
+### Use Case 2: Find Which Process is Using a Port
+
+Command: ss -tulnp
+
+What it shows: -p = Show process name and PID
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port  Peer Address:Port  Process
+LISTEN     0      128    0.0.0.0:22          0.0.0.0:*          users:(("sshd",pid=1234,fd=3))
+LISTEN     0      100    127.0.0.1:3306      0.0.0.0:*          users:(("mysqld",pid=5678,fd=21))
+LISTEN     0      128    0.0.0.0:80          0.0.0.0:*          users:(("httpd",pid=9012,fd=4))
+
+Real-World Scenario: You see port 80 is in use but don't know which program. This shows httpd (Apache) with PID 9012 is using port 80.
+
+Troubleshooting Example: Problem: Can't start web server, port 80 already in use. Solution: ss -tulnp | grep :80. Result: Shows which process is using port 80. Action: Kill that process or change web server port
+
+---
+
+### Use Case 3: Check All Active Connections
+
+Command: ss -tunap
+
+What it shows: -t = TCP connections, -u = UDP connections, -n = Numeric (no DNS lookup), -a = All connections (established, listening, etc.), -p = Process information
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port    Peer Address:Port    Process
+ESTAB      0      0      192.168.1.50:22        192.168.1.100:54321  users:(("sshd",pid=1234))
+ESTAB      0      0      192.168.1.50:443       203.0.113.50:45678    users:(("httpd",pid=5678))
+LISTEN     0      128    0.0.0.0:22             0.0.0.0:*            users:(("sshd",pid=999))
+
+Real-World Scenario: You want to see all active network connections on your server. This shows: Active SSH connection from 192.168.1.100, Active HTTPS connection from 203.0.113.50, SSH server listening for new connections
+
+Connection States: ESTAB = Established (active connection), LISTEN = Listening (waiting for connections), TIME-WAIT = Connection closing, CLOSE-WAIT = Remote closed local closing, SYN-SENT = Connection request sent
+
+---
+
+### Use Case 4: Check Specific Port
+
+Command: ss -tulnp | grep :80
+
+Alternative: ss -tlnp sport = :80
+
+What it shows: Only connections on port 80
+
+Example Output:
+LISTEN     0      128    0.0.0.0:80          0.0.0.0:*          users:(("httpd",pid=5678,fd=4))
+
+Real-World Scenario: Quick check if web server is running on port 80
+
+---
+
+### Use Case 5: Check Connections to Specific IP
+
+Command: ss -tunap dst 192.168.1.100
+
+What it shows: All connections to destination IP 192.168.1.100
+
+Example Output:
+ESTAB      0      0      192.168.1.50:54321    192.168.1.100:22      users:(("ssh",pid=1234))
+
+Real-World Scenario: Check if your server is connecting to another server (like database or backup server)
+
+---
+
+### Use Case 6: Check Connections from Specific IP
+
+Command: ss -tunap src 192.168.1.100
+
+What it shows: All connections from source IP 192.168.1.100
+
+Example Output:
+ESTAB      0      0      192.168.1.100:54321   192.168.1.50:22       users:(("ssh",pid=5678))
+
+Real-World Scenario: See who is connecting from a specific IP address (security monitoring)
+
+---
+
+### Use Case 7: Show Network Statistics Summary
+
+Command: ss -s
+
+What it shows: Summary of all socket statistics
+
+Example Output:
+Total: 150 (kernel 200)
+TCP:   45 (estab 30, closed 10, orphaned 0, synrecv 0, timewait 10/0), ports 0
+
+Transport Total     IP        IPv6
+*         200       -         -
+RAW       0         0         0
+UDP       15        10        5
+TCP       45        40        5
+INET      60        50        10
+FRAG      0         0         0
+
+Real-World Scenario: Quick overview of network activity on your system. Shows total connections, TCP states, and protocol breakdown.
+
+Interpretation: Total: 150 sockets (kernel tracking 200), TCP: 45 connections (30 established, 10 closed, 10 in timewait), UDP: 15 connections
+
+---
+
+### Use Case 8: Show Only Established TCP Connections
+
+Command: ss -tn state established
+
+What it shows: Only active TCP connections (not listening ports)
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port    Peer Address:Port
+ESTAB      0      0      192.168.1.50:22        192.168.1.100:54321
+ESTAB      0      0      192.168.1.50:443       203.0.113.50:45678
+
+Real-World Scenario: See only active connections, ignore listening ports. Useful for monitoring current traffic.
+
+---
+
+### Use Case 9: Show Listening Ports with Process Names
+
+Command: ss -tlnp
+
+What it shows: -t = TCP, -l = Listening, -n = Numeric, -p = Process
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port  Peer Address:Port  Process
+LISTEN     0      128    0.0.0.0:22          0.0.0.0:*          users:(("sshd",pid=1234,fd=3))
+LISTEN     0      100    127.0.0.1:3306      0.0.0.0:*          users:(("mysqld",pid=5678,fd=21))
+LISTEN     0      128    0.0.0.0:80          0.0.0.0:*          users:(("httpd",pid=9012,fd=4))
+
+Real-World Scenario: See what services are listening and which programs are running them. Essential for server administration.
+
+---
+
+### Use Case 10: Check Connections on Specific Port Range
+
+Command: ss -tunap sport :1024-65535
+
+What it shows: Connections on ports 1024 to 65535 (ephemeral ports)
+
+Example Output:
+ESTAB      0      0      192.168.1.50:54321    192.168.1.100:22      users:(("ssh",pid=1234))
+ESTAB      0      0      192.168.1.50:45678    203.0.113.50:443      users:(("curl",pid=5678))
+
+Real-World Scenario: Check outbound connections (client-side ports are usually in this range)
+
+---
+
+### Use Case 11: Show Extended Information
+
+Command: ss -tune
+
+What it shows: -e = Extended socket information (user, inode, etc.)
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port    Peer Address:Port    uid   inode
+ESTAB      0      0      192.168.1.50:22        192.168.1.100:54321  0     12345
+ESTAB      0      0      192.168.1.50:443       203.0.113.50:45678   48    67890
+
+Real-World Scenario: See which user owns each connection (uid column). Useful for security auditing.
+
+---
+
+### Use Case 12: Show Timer Information
+
+Command: ss -tuno
+
+What it shows: -o = Show timer information (time until connection closes, etc.)
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port    Peer Address:Port    timer
+ESTAB      0      0      192.168.1.50:22        192.168.1.100:54321  keepalive (7200.47/0/0)
+TIME-WAIT  0      0      192.168.1.50:443       203.0.113.50:45678  timewait (59.40/0/0)
+
+Real-World Scenario: Monitor connection timers. See keepalive timers, timewait states, etc.
+
+---
+
+### Use Case 13: Filter by Connection State
+
+Command: ss -tn state time-wait
+
+What it shows: Only connections in TIME-WAIT state
+
+Available States: established, syn-sent, syn-recv, fin-wait-1, fin-wait-2, time-wait, closed, close-wait, last-ack, listen, closing
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port    Peer Address:Port
+TIME-WAIT  0      0      192.168.1.50:443       203.0.113.50:45678
+TIME-WAIT  0      0      192.168.1.50:80        192.168.1.200:54321
+
+Real-World Scenario: Find connections that are closing but not yet fully closed. High TIME-WAIT count might indicate connection issues.
+
+---
+
+### Use Case 14: Show IPv6 Connections Only
+
+Command: ss -6 -tulnp
+
+What it shows: -6 = IPv6 only
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port           Peer Address:Port
+LISTEN     0      128    [::]:22                      [::]:*
+LISTEN     0      128    [::]:80                      [::]:*
+
+Real-World Scenario: Check IPv6 connectivity separately from IPv4
+
+---
+
+### Use Case 15: Show IPv4 Connections Only
+
+Command: ss -4 -tulnp
+
+What it shows: -4 = IPv4 only
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port    Peer Address:Port
+LISTEN     0      128    0.0.0.0:22             0.0.0.0:*
+LISTEN     0      128    0.0.0.0:80             0.0.0.0:*
+
+Real-World Scenario: Filter out IPv6 to see only IPv4 connections
+
+---
+
+### Use Case 16: Count Connections by State
+
+Command: ss -s
+
+What it shows: Summary with counts
+
+Example Output:
+Total: 150
+TCP:   45 (estab 30, closed 10, orphaned 0, synrecv 0, timewait 10/0)
+
+Real-World Scenario: Quick overview of connection health. High timewait or closed connections might indicate issues.
+
+---
+
+### Use Case 17: Find All Connections to Port 22 (SSH)
+
+Command: ss -tunap dport = :22
+
+What it shows: All connections to destination port 22
+
+Example Output:
+ESTAB      0      0      192.168.1.50:22        192.168.1.100:54321  users:(("sshd",pid=1234))
+LISTEN     0      128    0.0.0.0:22             0.0.0.0:*          users:(("sshd",pid=999))
+
+Real-World Scenario: Monitor all SSH connections. Security check to see who's connected via SSH.
+
+---
+
+### Use Case 18: Find Connections from Port 80
+
+Command: ss -tunap sport = :80
+
+What it shows: Connections from source port 80
+
+Example Output:
+ESTAB      0      0      192.168.1.50:80         203.0.113.50:45678    users:(("httpd",pid=5678))
+
+Real-World Scenario: See outbound connections from web server (rare, but useful for troubleshooting)
+
+---
+
+### Use Case 19: Show Internal TCP Information
+
+Command: ss -tuni
+
+What it shows: -i = Internal TCP information (congestion control, etc.)
+
+Example Output:
+State      Recv-Q Send-Q Local Address:Port    Peer Address:Port    cubic wscale:7,7 rto:204 rtt:2.5/0.5
+
+Real-World Scenario: Advanced TCP troubleshooting. See congestion control algorithm, window scaling, RTO (retransmission timeout), RTT (round-trip time).
+
+---
+
+### Use Case 20: Monitor Connections in Real-Time
+
+Command: watch -n 1 'ss -tunap'
+
+What it shows: Updates every 1 second
+
+Real-World Scenario: Monitor network activity in real-time. See connections appear and disappear. Useful for troubleshooting connection issues.
+
+---
+
+## Practical Troubleshooting Scenarios
+
+### Scenario 1: Port Already in Use
+
+Problem: Can't start Apache, port 80 already in use
+
+Solution:
+Step 1: ss -tulnp | grep :80
+Output: LISTEN 0 128 0.0.0.0:80 0.0.0.0:* users:(("nginx",pid=1234,fd=3))
+Step 2: kill 1234 (or stop nginx service)
+Step 3: Start Apache
+
+---
+
+### Scenario 2: Check if Service is Listening
+
+Problem: Web server not responding
+
+Solution:
+Step 1: ss -tlnp | grep :80
+If output shows LISTEN: Service is running, check firewall
+If no output: Service not running, start it
+
+---
+
+### Scenario 3: Find Suspicious Connections
+
+Problem: Security audit, find all SSH connections
+
+Solution:
+Command: ss -tunap dport = :22
+Review: Check Peer Address:Port to see who's connected
+Action: If unknown IP, investigate further
+
+---
+
+### Scenario 4: Monitor Database Connections
+
+Problem: Check MySQL connections
+
+Solution:
+Command: ss -tunap | grep :3306
+Output shows: All connections to MySQL port
+Count: ss -tunap | grep :3306 | wc -l (count connections)
+
+---
+
+### Scenario 5: Check if Port is Open for Remote Access
+
+Problem: Can't connect to server from remote
+
+Solution:
+Step 1: ss -tlnp | grep :22
+If shows 127.0.0.1:22: Only localhost access
+If shows 0.0.0.0:22: Accessible from all interfaces
+If no output: Service not running
+
+---
+
+## SS vs Netstat Comparison
+
+Old Way (netstat):
+netstat -tulnp
+
+Modern Way (ss):
+ss -tulnp
+
+Advantages of SS:
+- Faster execution
+- More detailed information
+- Better filtering
+- Actively maintained
+- Part of iproute2 (modern tools)
+
+When to Use Netstat:
+- Older systems without ss
+- Scripts that haven't been updated
+- Legacy compatibility
+
+---
+
+## Quick Reference Commands
+
+Basic Listening Ports: ss -tuln
+With Process Info: ss -tulnp
+All Connections: ss -tunap
+Summary Statistics: ss -s
+Specific Port: ss -tulnp | grep :80
+Established Only: ss -tn state established
+From Specific IP: ss -tunap src 192.168.1.100
+To Specific IP: ss -tunap dst 192.168.1.100
+IPv4 Only: ss -4 -tulnp
+IPv6 Only: ss -6 -tulnp
+With Timers: ss -tuno
+Extended Info: ss -tune
+Real-Time Monitor: watch -n 1 'ss -tunap'
+
+---
+
+## Summary
+
+SS is modern replacement for netstat. Faster and more powerful. Shows socket statistics and network connections. Essential for network troubleshooting. Use ss -tulnp for most common tasks. Use ss -s for quick summary. Use filters for specific queries. Part of modern Linux networking toolkit.
