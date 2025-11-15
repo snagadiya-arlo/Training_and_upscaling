@@ -1,1 +1,317 @@
+# 🌐 Linux Networking Concepts - Complete Guide with Real-Life Examples
 
+## 1. Internet Access to VM (VirtualBox)
+
+**Concept:** VirtualBox Bridged Adapter mode allows your VM to get its own IP address from your router, making it appear as a separate physical device on your network.
+
+**Real-Life Example:** Your home network is like an apartment building. Your router = Main building entrance. Your laptop = Apartment 1A. Your VM in NAT mode = A guest living in your apartment (shares your address). Your VM in Bridged mode = Separate apartment 1B (has its own address). When you use Bridged Adapter, your VM gets its own "apartment number" (IP address) from the building manager (router), so it can receive mail (internet traffic) directly.
+
+**Steps to Configure:** 1. Open VirtualBox Manager. 2. Select your VM (must be powered off). 3. Click "Settings" button. 4. Click "Network" in left pane. 5. Under "Attached to:" select "Bridged Adapter". 6. Click OK. 7. Start your VM. 8. Test connection: ping google.com
+
+**Use Cases:** Test web applications from other devices on your network. Allow other machines to connect to database in your VM. SSH to your VM from any device on same network. Run services (web servers, FTP) that need to be accessible from other machines.
+
+## 2. Network Components
+
+### 2.1 IP Address (Internet Protocol Address)
+
+**Concept:** A unique numerical label assigned to every device on a network (like 192.168.1.100). It's how devices find and communicate with each other.
+
+**Real-Life Example:** IP addresses are like home addresses. Your house: "123 Main Street" = 192.168.1.100. Neighbor's house: "124 Main Street" = 192.168.1.101. Google's house: "1600 Amphitheatre Parkway" = 8.8.8.8. Mail carriers use addresses to deliver packages; routers use IP addresses to deliver data packets.
+
+**Office Network Example:** 192.168.1.1 = Router/Gateway, 192.168.1.10 = File Server, 192.168.1.20 = Web Server, 192.168.1.30 = Database Server, 192.168.1.50 = John's Laptop, 192.168.1.51 = Sarah's Desktop, 192.168.1.100 = Conference Room TV
+
+**Commands:** ifconfig (view your IP address). ip addr show (modern way to view IP). ping 192.168.1.100 (check if device is online). ssh user@192.168.1.150 (SSH to remote server). curl http://192.168.1.100:8080 (access web application). curl ifconfig.me (find your public IP). nmap -sn 192.168.1.0/24 (scan network for active IPs). arp -a (view ARP table showing all IPs you've communicated with).
+
+**Configure Static IP:** Edit /etc/sysconfig/network-scripts/ifcfg-eth0 with content: DEVICE=eth0, BOOTPROTO=static, IPADDR=192.168.1.100, NETMASK=255.255.255.0, GATEWAY=192.168.1.1, DNS1=8.8.8.8, ONBOOT=yes. Then run: systemctl restart network
+
+**Use Cases:** Identify your machine on network. Check if printer is online (ping 192.168.1.200). SSH to production server. Access Jenkins at http://192.168.1.100:8080. Configure static IP for server so address never changes. Find all devices on office network.
+
+### 2.2 Subnet Mask
+
+**Concept:** Defines which part of IP is "network" (neighborhood) and which part is "host" (house number). Common masks: 255.255.255.0 = /24 = 254 usable hosts. 255.255.255.128 = /25 = 126 hosts. 255.255.0.0 = /16 = 65,534 hosts. 255.0.0.0 = /8 = 16,777,214 hosts.
+
+**Real-Life Example:** Like dividing a city into districts. Small network (255.255.255.0): Street is "Main Street". Network is 192.168.1.0. Houses are 192.168.1.1 to 192.168.1.254 (same street). All houses on "Main Street" can talk directly to each other. To reach "Oak Street" (192.168.2.x), you need the city post office (gateway). Large network (255.255.0.0): City is "Springfield". Network is 192.168.0.0. Neighborhoods are 192.168.1.x, 192.168.2.x up to 192.168.254.x. All neighborhoods in "Springfield" can communicate directly. To reach "Shelbyville" (192.169.x.x), you need interstate highway (gateway).
+
+**Commands:** ifconfig eth0 (view subnet mask). ip addr show eth0 (shows IP with CIDR notation like 192.168.1.50/24).
+
+**Calculate Network Size:** Subnet 255.255.255.0 = /24. Host bits: 32 - 24 = 8. Total addresses: 2^8 = 256. Usable hosts: 256 - 2 = 254 (subtract network address and broadcast address). Subnet 255.255.255.128 = /25. Host bits: 7. Total: 128. Usable: 126.
+
+**Determine if Two IPs are on Same Network:** IP1: 192.168.1.50 (subnet 255.255.255.0). IP2: 192.168.1.75 (subnet 255.255.255.0). Network part: 192.168.1.x. Result: SAME NETWORK - can communicate directly without router. IP1: 192.168.1.50 (subnet 255.255.255.0). IP3: 192.168.2.50 (subnet 255.255.255.0). Network parts: 192.168.1.x vs 192.168.2.x. Result: DIFFERENT NETWORKS - needs router/gateway.
+
+**Office Network Planning Example:** Company has 3 departments. Sales (50 employees): Network 192.168.1.0/24, Subnet 255.255.255.0, IPs 192.168.1.1-254 (254 hosts), Gateway 192.168.1.1. Engineering (100 employees): Network 192.168.2.0/24, Subnet 255.255.255.0, IPs 192.168.2.1-254 (254 hosts), Gateway 192.168.2.1. HR (20 employees): Network 192.168.3.0/25, Subnet 255.255.255.128, IPs 192.168.3.1-126 (126 hosts), Gateway 192.168.3.1.
+
+**Configure Subnet Mask:** Edit /etc/sysconfig/network-scripts/ifcfg-eth0 with: NETMASK=255.255.255.0 or using CIDR: PREFIX=24. Then run: systemctl restart network
+
+**Subnet Calculation Table:** 255.255.255.252 = /30 = 2 hosts (Point-to-point links). 255.255.255.248 = /29 = 6 hosts (Small office). 255.255.255.240 = /28 = 14 hosts (Department). 255.255.255.224 = /27 = 30 hosts (Small branch). 255.255.255.192 = /26 = 62 hosts (Medium branch). 255.255.255.128 = /25 = 126 hosts (Large branch). 255.255.255.0 = /24 = 254 hosts (Standard LAN). 255.255.0.0 = /16 = 65,534 hosts (Large campus).
+
+**Troubleshooting:** If you can't ping device on same physical network, check subnet mismatch. Device A: 192.168.1.50, Subnet 255.255.255.0. Device B: 192.168.1.150, Subnet 255.255.255.128. Device A thinks B is on same network but Device B thinks it's on different network. Result: Communication fails. Fix: Use same subnet mask on both devices.
+
+### 2.3 Gateway (Default Gateway)
+
+**Concept:** The "exit door" of your network. It's the router that forwards traffic from your local network to external networks (like the internet). Think of it as the bridge between your local network and the outside world.
+
+**Real-Life Example:** Gateway is the main entrance/exit of your apartment building. You (192.168.1.50) want to send a letter to Google (8.8.8.8). You can't deliver it yourself (different network). You give it to the building manager (gateway at 192.168.1.1). The building manager knows how to route it to the postal service (internet). Communication flow: Your Computer (192.168.1.50) → Gateway (192.168.1.1) → ISP Router → Internet → Google (8.8.8.8).
+
+**Commands:** route -n (view default gateway). ip route show (modern way, output shows: default via 192.168.1.1 dev eth0). netstat -rn (another way to view routes). ping 192.168.1.1 (test gateway connectivity - if this fails, you have no internet access). traceroute google.com (trace route to see path through gateway, shows: 1. 192.168.1.1 your gateway, 2. 10.0.0.1 ISP router, 3. Internet backbone, 15. 8.8.8.8 Google DNS). ip route add default via 192.168.1.1 (temporarily add gateway). ip route del default (delete default gateway).
+
+**Configure Gateway:** Edit /etc/sysconfig/network-scripts/ifcfg-eth0 with: GATEWAY=192.168.1.1. Then run: systemctl restart network
+
+**Multiple Gateway Scenario:** Server with two network connections: eth0: Internal network (Gateway: 10.0.0.1), eth1: Internet connection (Gateway: 203.0.113.1). Commands: ip route add 10.0.0.0/8 via 10.0.0.1 dev eth0 (internal traffic). ip route add default via 203.0.113.1 dev eth1 (internet traffic).
+
+**Home Network Example:** Internet (ISP) → Cable Modem (Public IP) → Router/Gateway: 192.168.1.1 → Your Laptop: 192.168.1.50 (Gateway: .1) and Smart TV: 192.168.1.100 (Gateway: .1). When you browse google.com: 1. Laptop sends packet to gateway (192.168.1.1). 2. Router forwards to ISP. 3. Internet routes to Google. 4. Response comes back same path.
+
+**Gateway Failure Troubleshooting:** Symptom: Can ping local devices but not internet. Step 1: Check if gateway is reachable (ping 192.168.1.1 - if fails, gateway/router is down). Step 2: Check routing table (route -n - verify default gateway entry exists). Step 3: Check if gateway has internet (login to router admin panel or connect laptop directly to router and test). Step 4: DNS vs Gateway issue (ping 8.8.8.8 - if success, gateway works but DNS issue; if fails, gateway problem). Step 5: Check gateway configuration (ip route show - should show: default via 192.168.1.1 dev eth0). Fix: Delete and re-add default route (ip route del default, then ip route add default via 192.168.1.1 dev eth0).
+
+**Gateway Priority (Metric):** If you have multiple gateways, use metric to set priority. Lower metric = higher priority. Primary gateway: ip route add default via 192.168.1.1 dev eth0 metric 100. Backup gateway: ip route add default via 192.168.1.2 dev eth1 metric 200. If primary gateway fails, traffic automatically uses backup.
+
+### 2.4 Static vs. DHCP
+
+**Concept:** DHCP (Dynamic Host Configuration Protocol) = Automatic IP assignment from DHCP server. Static IP = Manual IP configuration that never changes. DHCP Process: 1. DHCP Discover (client broadcasts "I need an IP"), 2. DHCP Offer (server responds "Here's an available IP"), 3. DHCP Request (client says "I'll take it"), 4. DHCP Acknowledge (server confirms "It's yours for X hours"). Static IP Process: Administrator manually configures IP settings and IP never changes unless manually changed.
+
+**Real-Life Example:** DHCP is like a hotel: You check in, they assign you room 305. Tomorrow, you might get room 408. You don't care which room, just need a place to sleep. Easy, automatic, no hassle. Static IP is like owning a house: Your address is always "123 Main Street". Everyone knows where to find you. Your address never changes. Requires manual setup, but provides stability.
+
+**Use DHCP for:** Laptops and mobile devices (change locations frequently). Guest devices on your network. Workstations that don't host services. Temporary devices. Home computers. IoT devices (sometimes - printers might need static). Advantages: No manual configuration needed, easy to add new devices, automatic network updates, prevents IP conflicts, centralized management. Disadvantages: IP can change (problematic for servers), depends on DHCP server availability, slightly slower network startup.
+
+**Configure DHCP:** Edit /etc/sysconfig/network-scripts/ifcfg-eth0 with: DEVICE=eth0, BOOTPROTO=dhcp, ONBOOT=yes. Then run: systemctl restart network. dhclient -r (release current IP). dhclient eth0 (request new IP). cat /var/lib/dhclient/dhclient.lease (view DHCP lease information).
+
+**Use Static IP for:** Servers (web, database, email, DNS, DHCP servers). Network equipment (routers, switches, firewalls). Printers and network-attached storage (NAS). Security cameras. VoIP phones. Any device people connect to by IP address. Advantages: IP never changes, no dependency on DHCP server, faster boot (no DHCP negotiation), easier for DNS configuration, required for servers hosting services. Disadvantages: Manual configuration required, risk of IP conflicts if not managed properly, more administrative overhead, must manually update if network changes.
+
+**Configure Static IP:** Edit /etc/sysconfig/network-scripts/ifcfg-eth0 with: DEVICE=eth0, BOOTPROTO=static, ONBOOT=yes, IPADDR=192.168.1.100, NETMASK=255.255.255.0, GATEWAY=192.168.1.1, DNS1=8.8.8.8, DNS2=8.8.4.4. Then run: systemctl restart network
+
+**Small Office Network Example:** Static IPs (Infrastructure): Router/Gateway 192.168.1.1, Network Printer 192.168.1.10, File Server 192.168.1.11, Security Camera 192.168.1.12, Wi-Fi Access Point 192.168.1.13. DHCP Pool (Workstations): 192.168.1.100-192.168.1.200 for employee laptops, guest devices, mobile phones. Advantages: Servers always at same IP (easy to find), employee devices get automatic configuration, no IP conflicts.
+
+**Web Server Example:** Production Web Server Setup with Static IP: Server IP 203.0.113.50, Subnet 255.255.255.0, Gateway 203.0.113.1, DNS1 8.8.8.8, DNS2 8.8.4.4. DNS points domain to static IP: www.example.com → 203.0.113.50. Why Static? IP must never change (DNS points to it), firewall rules configured for this IP, no dependency on DHCP server, faster network initialization.
+
+**DHCP Reservation:** DHCP reservation = Device gets same IP via DHCP every time based on MAC address. Example: Network Printer with MAC 00:1A:2B:3C:4D:5E gets Reserved IP 192.168.1.50. DHCP Server config: host printer1 { hardware ethernet 00:1A:2B:3C:4D:5E; fixed-address 192.168.1.50; }. Advantages: IP never changes (like static), device still uses DHCP (automatic configuration), centrally managed from DHCP server, no manual configuration on device. Use for: Printers, network cameras, VoIP phones, access points.
+
+### 2.5 Interface
+
+**Concept:** A network interface is software representation of your network hardware (NIC). It's how the operating system communicates with network devices. Each interface has unique name and can be configured independently.
+
+**Common Interface Names:** eth0, eth1, eth2 (Ethernet interfaces, older naming). ens33, ens192 (Ethernet interfaces, systemd naming). enp0s3, enp0s8 (Ethernet, PCI bus location naming). wlan0, wlp2s0 (Wireless interfaces). lo (Loopback interface, 127.0.0.1). bond0 (Bonded interface, multiple NICs combined). br0 (Bridge interface). virbr0 (Virtual bridge, used by KVM/libvirt).
+
+**Real-Life Example:** Network interfaces are like doors to your house. eth0 = Front door (main entrance, wired connection). wlan0 = Back door (wireless connection). lo = Internal hallway (loopback, talking to yourself). bond0 = Double-wide door (two doors combined for redundancy). Each door (interface) can have its own address (IP), and you can choose which door to use for different purposes.
+
+**Commands:** ifconfig (list all active interfaces). ifconfig -a (shows all interfaces including down/inactive). ip link show (modern way to list interfaces). ip addr show (shows interfaces with IP addresses). nmcli device status (NetworkManager way). ifconfig eth0 (view specific interface details). ethtool eth0 (detailed hardware info). ifconfig eth0 down (bring interface down/disable). ifconfig eth0 up (bring interface up/enable). ip link set eth0 down (modern way to disable). ip link set eth0 up (modern way to enable). ifdown eth0 (RHEL/CentOS way). ifup eth0 (RHEL/CentOS way). ip -s link show eth0 (view traffic statistics). iftop -i eth0 (interactive bandwidth monitor). nload eth0 (real-time traffic graph). nethogs eth0 (per-process bandwidth usage).
+
+**Server with Multiple Interfaces Example:** Database Server: eth0 192.168.1.50 (Internal - Application traffic), eth1 10.0.0.50 (Backup network), lo 127.0.0.1 (Loopback - local connections). Routing table shows which interface for which traffic: 192.168.1.0/24 dev eth0 (app traffic), 10.0.0.0/24 dev eth1 (backup traffic).
+
+**Configure Interface IP Temporary:** ifconfig eth0 192.168.1.100 netmask 255.255.255.0 up, or ip addr add 192.168.1.100/24 dev eth0. Permanent: Edit /etc/sysconfig/network-scripts/ifcfg-eth0 with: DEVICE=eth0, BOOTPROTO=static, ONBOOT=yes, IPADDR=192.168.1.100, NETMASK=255.255.255.0, GATEWAY=192.168.1.1, DNS1=8.8.8.8. Then run: systemctl restart network.
+
+**Multiple IPs on Single Interface:** ifconfig eth0:0 192.168.1.101 netmask 255.255.255.0 up. ifconfig eth0:1 192.168.1.102 netmask 255.255.255.0 up. or using ip command: ip addr add 192.168.1.101/24 dev eth0. ip addr add 192.168.1.102/24 dev eth0. Verify: ip addr show eth0. Use case: Web server hosting multiple websites.
+
+### 2.6 Interface MAC Address
+
+**Concept:** A MAC (Media Access Control) address is unique hardware identifier permanently assigned to every network interface card (NIC). Format: 48-bit address (6 bytes), written as 00:0C:29:6D:80:1F. First 3 bytes = Manufacturer ID, Last 3 bytes = Device ID. Examples: 00:0C:29 = VMware Inc, 00:50:56 = VMware Inc, 08:00:27 = Oracle VirtualBox, DC:A6:32 = Raspberry Pi Foundation.
+
+**Real-Life Example:** Think of MAC addresses like vehicle VIN numbers. IP Address = License plate (can change when you move states). MAC Address = VIN number (permanently etched into vehicle, never changes). When you move to new city (network), your license plate (IP) changes, but your VIN (MAC) stays the same.
+
+**Commands:** ifconfig eth0 (view MAC, shows: ether 00:0c:29:6d:80:1f). ip link show eth0 (shows: link/ether 00:0c:29:6d:80:1f). ip link show | grep ether (view all MACs). cat /sys/class/net/eth0/address (shows: 00:0c:29:6d:80:1f).
+
+**Change MAC Address Temporarily:** ip link set dev eth0 down. ip link set dev eth0 address 00:11:22:33:44:55. ip link set dev eth0 up. Verify: ip link show eth0. Why change MAC? Bypass MAC filtering, testing, privacy (MAC reveals manufacturer), clone router's MAC for ISP authentication.
+
+**Find Device by MAC Address:** arp -a (view ARP table showing IP to MAC mappings). arp | grep "00:1a:2b:3c:4d:5e" (find specific MAC). arp -s 192.168.1.100 00:11:22:33:44:55 (add static ARP entry). arp -d 192.168.1.100 (delete ARP entry).
+
+**MAC Address Filtering Example:** Wi-Fi Router only allows specific devices. Allowed Devices: John's Laptop 00:1A:2B:3C:4D:5E, Sarah's Phone 00:11:22:33:44:55, Office Printer 00:AA:BB:CC:DD:EE. Router Configuration uses whitelist: 00:1A:2B:3C:4D:5E Allow, 00:11:22:33:44:55 Allow, 00:AA:BB:CC:DD:EE Allow, ALL_OTHERS Deny.
+
+## 3. Network Files and Commands
+
+### Interface Detection
+
+**Commands to detect network interfaces:** lspci | grep -i ethernet (list PCI network cards). lshw -class network (detailed hardware info). ip link show (list all network interfaces). ifconfig -a (list all interfaces including inactive). nmcli device status (NetworkManager device status). ls /sys/class/net/ (list all network interface names). dmesg | grep eth (kernel messages about ethernet). cat /proc/net/dev (network device statistics).
+
+### Assigning an IP Address
+
+**Temporary (lost after reboot):** ifconfig eth0 192.168.1.100 netmask 255.255.255.0 up. ip addr add 192.168.1.100/24 dev eth0. ip link set eth0 up.
+
+**Permanent RHEL/CentOS:** Edit /etc/sysconfig/network-scripts/ifcfg-eth0 with: DEVICE=eth0, BOOTPROTO=static, ONBOOT=yes, IPADDR=192.168.1.100, NETMASK=255.255.255.0, GATEWAY=192.168.1.1, DNS1=8.8.8.8, DNS2=8.8.4.4. Then restart network: systemctl restart network or ifup eth0
+
+**Permanent Ubuntu/Debian Netplan:** Edit /etc/netplan/01-netcfg.yaml with: network:, version: 2, renderer: networkd, ethernets:, eth0:, dhcp4: no, addresses:, - 192.168.1.100/24, gateway4: 192.168.1.1, nameservers:, addresses: [8.8.8.8, 8.8.4.4]. Then apply: netplan apply
+
+### Interface Configuration Files
+
+**/etc/nsswitch.conf** Purpose: Name Service Switch configuration file. Determines order and sources for system databases. Example content: hosts: files dns (check /etc/hosts first, then DNS). passwd: files (user info from /etc/passwd). group: files (group info from /etc/group). Use case: Control hostname resolution order.
+
+**/etc/hostname** Purpose: Contains system's hostname. View: cat /etc/hostname. Set temporarily: hostname webserver01. Set permanently: hostnamectl set-hostname webserver01 or echo "webserver01" > /etc/hostname. Use case: Set server name.
+
+**/etc/sysconfig/network** Purpose: Global network settings (RHEL/CentOS older versions). Example content: NETWORKING=yes, HOSTNAME=webserver01, GATEWAY=192.168.1.1. Use case: Set global gateway for all interfaces.
+
+**/etc/sysconfig/network-scripts/ifcfg-nic** Purpose: Interface-specific configuration (RHEL/CentOS). One file per interface. Example /etc/sysconfig/network-scripts/ifcfg-eth0: DEVICE=eth0, TYPE=Ethernet, BOOTPROTO=static, ONBOOT=yes, IPADDR=192.168.1.100, NETMASK=255.255.255.0, GATEWAY=192.168.1.1, DNS1=8.8.8.8, DNS2=8.8.4.4, HWADDR=00:0C:29:6D:80:1F. For DHCP: DEVICE=eth0, BOOTPROTO=dhcp, ONBOOT=yes. Use case: Configure static IP for web server.
+
+**/etc/resolv.conf** Purpose: DNS resolver configuration. Lists DNS servers to query. Example content: nameserver 8.8.8.8, nameserver 8.8.4.4, search company.local, domain company.local. View: cat /etc/resolv.conf. Manually edit (temporary): echo "nameserver 1.1.1.1" >> /etc/resolv.conf. Permanent RHEL/CentOS: Set DNS1 and DNS2 in /etc/sysconfig/network-scripts/ifcfg-eth0. Use case: Change DNS servers.
+
+### Network Commands
+
+**ping** Purpose: Test network connectivity. Usage: ping 192.168.1.1 (test gateway). ping google.com (test internet). ping -c 5 192.168.1.100 (send only 5 packets). ping -i 2 192.168.1.50 (ping every 2 seconds). ping -s 1000 192.168.1.1 (send 1000-byte packets). Use cases: Check if host is online. Test internet connectivity. Measure latency. Troubleshoot packet loss.
+
+**ifconfig** Purpose: Configure and display network interfaces. Usage: ifconfig (show all active interfaces). ifconfig -a (show all interfaces including down). ifconfig eth0 (show specific interface). ifconfig eth0 up (enable interface). ifconfig eth0 down (disable interface). ifconfig eth0 192.168.1.100 netmask 255.255.255.0 (assign IP). ifconfig eth0 mtu 9000 (set MTU).
+
+**ifup / ifdown** Purpose: Bring interface up or down (RHEL/CentOS). Usage: ifup eth0 (activate interface using config). ifdown eth0 (deactivate interface). Use cases: Restart interface after configuration change. Disable interface without removing config.
+
+**netstat** Purpose: Network statistics. Usage: netstat -i (interface statistics). netstat -r (routing table). netstat -tuln (show all listening ports). netstat -tunap (show all connections with process IDs). netstat -s (protocol statistics). Use cases: Check listening ports. Find which process using port 80. View active connections.
+
+**tcpdump** Purpose: Packet capture and network traffic analysis. Usage: tcpdump -i eth0 (capture all traffic). tcpdump -i eth0 host 192.168.1.100 (capture traffic to/from specific host). tcpdump -i eth0 port 80 (capture HTTP traffic). tcpdump -i eth0 port 22 (capture SSH traffic). tcpdump -i eth0 -w /tmp/capture.pcap (save to file). tcpdump -r /tmp/capture.pcap (read from file). tcpdump -i eth0 icmp (capture ping traffic). Use cases: Troubleshoot connectivity. Verify firewall rules. Analyze application behavior. Debug network protocols.
+
+**Additional Useful Commands:** traceroute google.com (trace route to destination). route -n (display routing table). ip route show (modern way to show routes). arp -a (view ARP cache). nslookup google.com (DNS lookup). dig google.com (detailed DNS query). host google.com (simple DNS lookup). ss -tuln (modern replacement for netstat). nc -zv 192.168.1.100 80 (test if port 80 is open). curl -I http://192.168.1.100 (test HTTP connectivity). mtr google.com (combination of ping and traceroute). iftop -i eth0 (real-time bandwidth usage). nload eth0 (real-time bandwidth graph). nethogs eth0 (bandwidth usage per process).
+
+## 4. NIC Information
+
+### NIC = Network Interface Card
+
+**Concept:** Physical or virtual hardware that connects computer to network. It's the actual network adapter (ethernet port or WiFi card).
+
+**Real-Life Example:** NIC is like the mailbox on your house. It's where network data (mail) arrives and departs. Without a mailbox (NIC), you can't send or receive mail (network traffic).
+
+**Example Interface Names:** ethtool enp0s3 (en = ethernet, p0 = PCI bus 0, s3 = slot 3). Logical name used by system.
+
+### Other NICs
+
+**lo (Loopback Interface)** Purpose: Special interface for computer to communicate with itself. IP Address: Always 127.0.0.1. Hostname: localhost. Commands: ping localhost (test if TCP/IP stack is working). ping 127.0.0.1. curl http://localhost:8080 (access local web server). Use cases: Test if network stack is functioning. Connect to local database. Run local web server during development. Troubleshoot applications without network. Example: Web developer runs Apache on localhost:80. Browser connects to http://localhost to test website locally.
+
+**virbr0 (Virtual Bridge 0)** Purpose: Virtual bridge interface used by KVM/libvirt for NAT. Created automatically when libvirt is installed. Virtual environments use it to connect to outside network. Typical IP: 192.168.122.1. Commands: ifconfig virbr0 (view virtual bridge). brctl show (show all bridges). virsh net-list (list libvirt virtual networks). Use cases: Provide internet to virtual machines. NAT for VM traffic. Isolated network for VMs. DHCP for VMs. Example: You run KVM virtual machine. VM gets IP 192.168.122.100 from virbr0. VM can access internet through NAT via virbr0. How it works: VM sends packet to virbr0 (192.168.122.1). virbr0 NATs packet to use host's IP. Packet goes to internet. Response comes back, virbr0 forwards to VM.
+
+### NIC Commands
+
+**lspci | grep -i ethernet** (list physical network cards). Example output: 02:00.0 Ethernet controller: Intel Corporation 82545EM Gigabit Ethernet Controller
+
+**ethtool eth0** (detailed NIC information). Example output: Speed: 1000Mb/s, Duplex: Full, Link detected: yes, Auto-negotiation: on. Use case: Verify link speed. Check if cable is connected. Troubleshoot duplex mismatch.
+
+**ip link show** (show all network interfaces). **ifconfig -a** (show all interfaces with details). **nmcli device status** (NetworkManager status).
+
+**View NIC statistics:** ifconfig eth0 (shows RX/TX packets, errors). ip -s link show eth0 (detailed statistics). ethtool -S eth0 (driver-specific statistics).
+
+## 5. NIC Bonding
+
+### Concept
+
+NIC bonding (Network bonding) = Aggregation or combination of multiple NIC into single bond interface. Main purpose: Provide high availability and redundancy.
+
+**Real-Life Example:** Like having multiple doors to your house. If front door (NIC1) gets blocked or broken, you can still enter/exit through back door (NIC2). Or both doors can be used simultaneously to move furniture faster (increased bandwidth).
+
+### Bonding Diagram
+nic1 (eth0) + nic2 (eth1) = bond0
+Two NICs combined into one logical interface
+
+
+### Bonding Modes
+
+**Mode 0: balance-rr (Round-Robin)** Packets transmitted sequentially from first to last NIC. Provides load balancing and fault tolerance. Use case: General purpose with load balancing. Example: Packet 1 goes through eth0, Packet 2 through eth1, Packet 3 through eth0. Bandwidth: 2 NICs × 1Gbps = 2Gbps.
+
+**Mode 1: active-backup (Active-Backup)** Only ONE NIC is active. If active NIC fails, backup NIC takes over immediately. Most common mode. Use case: Redundancy/High Availability without switch configuration. Example: eth0 is active handling all traffic. eth0 fails → eth1 becomes active within seconds. Bandwidth: 1Gbps (only one NIC active at a time). Advantage: Works with any switch, no special configuration needed.
+
+**Mode 2: balance-xor (XOR Load Balancing)** Uses XOR formula based on source/destination MAC/IP to select NIC. Same source-destination pair always uses same NIC. Use case: Load balancing with better distribution. Example: Traffic to 192.168.1.100 always uses eth0. Traffic to 192.168.1.101 always uses eth1.
+
+**Mode 3: broadcast** Transmits everything on all NICs simultaneously. Use case: Fault tolerance (rarely used due to inefficiency). Bandwidth: No increase (same data sent multiple times).
+
+**Mode 4: 802.3ad (LACP - Link Aggregation)** Dynamic link aggregation using IEEE 802.3ad standard. Creates aggregation groups sharing same speed/duplex. Requires switch support. Use case: Maximum throughput with redundancy (enterprise networks). Example: Two 1Gbps NICs = 2Gbps bandwidth. If one NIC fails, still have 1Gbps. Requirement: Switch must support and be configured for LACP.
+
+**Mode 5: balance-tlb (Transmit Load Balancing)** Outgoing traffic distributed across NICs. Incoming traffic received on one NIC. No switch configuration required. Use case: Outbound-heavy workloads (web servers, backup servers).
+
+**Mode 6: balance-alb (Adaptive Load Balancing)** Transmit and receive load balancing. Doesn't require switch support. Use case: Best general-purpose bonding without switch configuration. Advantage: Load balancing in both directions without special switch config.
+
+### Bonding Benefits
+
+**High Availability:** If one NIC fails, traffic automatically fails over to other NIC(s). No downtime. Example: Database server with Mode 1. Primary NIC fails at 3 AM. Backup NIC takes over in 2 seconds. Database stays online.
+
+**Redundancy:** Multiple paths to network. Single point of failure eliminated. Example: Cable gets unplugged or damaged. Server stays connected via second NIC.
+
+**Link Aggregation (Increased Bandwidth):** Combine bandwidth of multiple NICs. Example: Two 1Gbps NICs in Mode 4 (LACP) = 2Gbps total bandwidth. Use case: File server serving many clients simultaneously.
+
+### When to Use NIC Bonding
+
+**Critical Servers:** Database servers (cannot afford downtime). Web servers (high availability required). Email servers (must be always accessible). File servers (need high throughput and redundancy).
+
+**High Bandwidth Requirements:** Video streaming servers. Backup servers. Storage servers. VM host servers.
+
+**Mission-Critical Applications:** Payment processing systems. Hospital medical record systems. Stock trading platforms. Emergency services systems.
+
+### Real-World Scenarios
+
+**Scenario 1: Active-Backup for Database Server** Setup: Database server with 2 NICs in Mode 1. Configuration: eth0: 192.168.1.50 (active), eth1: 192.168.1.50 (backup, same IP), bond0: 192.168.1.50. Normal operation: All traffic uses eth0. Failure scenario: Network cable on eth0 unplugged. Result: Within 2 seconds, eth1 becomes active. Database clients continue working without interruption.
+
+**Scenario 2: LACP for High-Traffic Web Server** Setup: Web server with 2 NICs in Mode 4 (802.3ad LACP). Configuration: eth0: Part of bond0, eth1: Part of bond0, bond0: 192.168.1.100, Switch: Configured for LACP. Benefits: 2Gbps total bandwidth, Load distributed across both NICs, If one NIC fails still have 1Gbps, Handles 1000 concurrent users smoothly.
+
+## 6. NIC Bonding Configuration Procedure
+
+### Bonding Commands
+
+**modprobe bonding** Purpose: Load bonding kernel module. Usage: modprobe bonding. Verify: lsmod | grep bonding. This must be done before creating bond interfaces.
+
+**modinfo bonding** Purpose: Show bonding module information and available parameters. Usage: modinfo bonding. Output shows: Available bonding modes (0-6), parameters (mode, miimon, etc.), author, license.
+
+### Configuration Files for Bonding
+
+**Create bond0 interface configuration:** File: /etc/sysconfig/network-scripts/ifcfg-bond0. Content: DEVICE=bond0, TYPE=Bond, NAME=bond0, BONDING_MASTER=yes, BOOTPROTO=static, IPADDR=192.168.1.100, NETMASK=255.255.255.0, GATEWAY=192.168.1.1, DNS1=8.8.8.8, ONBOOT=yes, BONDING_OPTS="mode=1 miimon=100". mode=1 = Active-backup mode. miimon=100 = Link monitoring every 100ms.
+
+**Edit eth0 (slave NIC 1):** File: /etc/sysconfig/network-scripts/ifcfg-eth0. Content: DEVICE=eth0, TYPE=Ethernet, BOOTPROTO=none, ONBOOT=yes, MASTER=bond0, SLAVE=yes.
+
+**Edit eth1 (slave NIC 2):** File: /etc/sysconfig/network-scripts/ifcfg-eth1. Content: DEVICE=eth1, TYPE=Ethernet, BOOTPROTO=none, ONBOOT=yes, MASTER=bond0, SLAVE=yes.
+
+### Step-by-Step Bonding Setup
+
+**Step 1:** Install required packages: yum install -y kernel-module-bonding
+
+**Step 2:** Load bonding module: modprobe bonding, then verify: lsmod | grep bonding
+
+**Step 3:** Create bond0 configuration file: vi /etc/sysconfig/network-scripts/ifcfg-bond0, add content shown above.
+
+**Step 4:** Edit eth0 configuration: vi /etc/sysconfig/network-scripts/ifcfg-eth0, add content shown above.
+
+**Step 5:** Edit eth1 configuration: vi /etc/sysconfig/network-scripts/ifcfg-eth1, add content shown above.
+
+**Step 6:** Restart network service: systemctl restart network or service network restart
+
+**Step 7:** Verify bonding: cat /proc/net/bonding/bond0 (shows bonding status, active slave, mode). ifconfig bond0 (verify bond0 has IP address). ip addr show bond0 (modern way). ping 192.168.1.1 (test connectivity through bond).
+
+**Step 8:** Test failover: ifconfig eth0 down (disable active NIC). cat /proc/net/bonding/bond0 (verify eth1 is now active). ping 192.168.1.1 (verify connectivity still works). ifconfig eth0 up (bring eth0 back up).
+
+### Bonding Status Commands
+
+**cat /proc/net/bonding/bond0** Shows: Bonding Mode (active-backup, 802.3ad, etc.), Primary Slave, Currently Active Slave, MII Status (up/down), Link Failure Count, Slave Interface (eth0, eth1), MII Status per slave, Speed, Duplex, Link Failure Count per slave.
+
+**ifconfig bond0** Shows: bond0 IP address, netmask, MAC address, TX/RX packets.
+
+**ethtool bond0** Shows: Link detected, Speed, Duplex.
+
+**ip link show bond0** Shows: bond0 status, MAC address, master/slave relationships.
+
+### Troubleshooting Bonding
+
+**Problem: bond0 not showing up** Solution: Check if bonding module loaded (lsmod | grep bonding). If not loaded, run: modprobe bonding. Verify configuration files syntax. Restart network: systemctl restart network.
+
+**Problem: Only one NIC working** Solution: Check bonding mode in /proc/net/bonding/bond0. If Mode 1 (active-backup), this is normal behavior. If Mode 4 (LACP), check switch configuration.
+
+**Problem: Failover not working** Solution: Check miimon value in BONDING_OPTS. Recommended: miimon=100. Verify both NICs are up: ip link show. Check bonding status: cat /proc/net/bonding/bond0. Test manually: ifconfig eth0 down, then check if eth1 becomes active.
+
+**Problem: LACP not working** Solution: Verify switch supports LACP. Configure switch ports for LACP. Check bonding mode is 4: cat /proc/net/bonding/bond0 | grep "Bonding Mode". Verify switch and server negotiating: ethtool eth0, ethtool eth1.
+
+### Complete Working Example
+
+**Goal:** Create bond0 with 2 NICs in active-backup mode for database server.
+
+**Configuration:** bond0 IP: 10.0.0.50/24, Gateway: 10.0.0.1, DNS: 8.8.8.8, Mode: 1 (active-backup), NICs: eth0 and eth1.
+
+**Step-by-step:**
+
+1. Load bonding module: modprobe bonding
+
+2. Create /etc/sysconfig/network-scripts/ifcfg-bond0: DEVICE=bond0, TYPE=Bond, NAME=bond0, BONDING_MASTER=yes, BOOTPROTO=static, IPADDR=10.0.0.50, NETMASK=255.255.255.0, GATEWAY=10.0.0.1, DNS1=8.8.8.8, ONBOOT=yes, BONDING_OPTS="mode=1 miimon=100"
+
+3. Create /etc/sysconfig/network-scripts/ifcfg-eth0: DEVICE=eth0, TYPE=Ethernet, BOOTPROTO=none, ONBOOT=yes, MASTER=bond0, SLAVE=yes
+
+4. Create /etc/sysconfig/network-scripts/ifcfg-eth1: DEVICE=eth1, TYPE=Ethernet, BOOTPROTO=none, ONBOOT=yes, MASTER=bond0, SLAVE=yes
+
+5. Restart network: systemctl restart network
+
+6. Verify: cat /proc/net/bonding/bond0, ifconfig bond0, ping 10.0.0.1
+
+7. Test failover: ifconfig eth0 down, wait 2 seconds, cat /proc/net/bonding/bond0 (should show eth1 as Currently Active Slave), ping 10.0.0.1 (should still work), ifconfig eth0 up
+
+**Result:** Database server has redundant network connectivity. If primary NIC fails, automatic failover to backup NIC within 2 seconds. No database downtime. Continuous operation.
+
+---
+
+## Summary
+
+This guide covered all essential Linux networking concepts: VirtualBox bridged networking for VM internet access. Network components (IP address, subnet mask, gateway, static vs DHCP, interface, MAC address). Network configuration files (/etc/nsswitch.conf, /etc/hostname, /etc/sysconfig/network-scripts/ifcfg-nic, /etc/resolv.conf). Network commands (ping, ifconfig, ifup/ifdown, netstat, tcpdump). NIC information (physical and virtual interfaces like lo and virbr0). NIC bonding for high availability and redundancy with multiple bonding modes. Complete bonding configuration procedure with real-world examples.
+All concepts explained with real-life examples for easy understanding. All commands provided with practical use cases. Ready to implement in production environments.
