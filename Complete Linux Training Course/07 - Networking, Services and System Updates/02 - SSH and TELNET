@@ -1,0 +1,208 @@
+# SSH and Telnet - Complete Guide with Network Debugging
+
+## 1. SSH vs Telnet Overview
+
+### What is Telnet?
+Telnet is an unsecured connection protocol. All data including usernames and passwords is sent in plain text. Real-Life Example: Like sending a postcard - anyone can read it. Use Cases: Legacy systems only, internal isolated networks, basic network testing. Why Avoid: Highly vulnerable to eavesdropping and credential theft.
+
+### What is SSH?
+SSH (Secure Shell) is a secured connection protocol that encrypts all data. Real-Life Example: Like sending a sealed encrypted letter in a locked vault. Use Cases: Remote server administration, secure file transfer, port forwarding, automated tasks, version control.
+
+### Client and Server
+Client Package: Software on your local machine (like ssh command or PuTTY). Server Package: Software on remote machine (sshd daemon). How They Work: Client initiates connection → Server accepts → Secure communication.
+
+### Client-Server Diagram
+┌──────────┐ ┌──────────┐
+│ Server │ │ Client │
+│ sshd │◄─── SSH ──────────►│ ssh │
+└──────────┘ └──────────┘
+
+
+## 2. Telnet for Network Debugging
+
+### Why Use Telnet for Debugging?
+Excellent for testing network connectivity. Can connect to any TCP port. Shows if port is open or closed. Simple and available. Important: Use only for testing, never for actual access.
+
+### Basic Syntax
+telnet [hostname or IP] [port]
+
+### Common Debugging Scenarios
+
+Scenario 1: Check Web Server
+Command: telnet www.example.com 80
+Success Output: Connected to www.example.com.
+Failure Output: Connection refused
+
+Scenario 2: Check SSH Server
+Command: telnet 192.168.1.100 22
+Success Output: SSH-2.0-OpenSSH_7.4
+Failure Output: Connection refused
+
+Scenario 3: Check Database
+Command: telnet 192.168.1.50 3306
+Success Output: Connected
+Failure Output: Connection timed out
+
+Scenario 4: Check Email Server
+Command: telnet mail.example.com 25
+Success Output: 220 mail.example.com ESMTP Postfix
+Failure Output: Connection refused
+
+### Debugging Workflow
+Step 1: ping 192.168.1.100 (check if server online)
+Step 2: telnet 192.168.1.100 80 (check if port open)
+Step 3: curl http://192.168.1.100 (check if service responding)
+Step 4: firewall-cmd --list-all (check firewall rules)
+
+### Modern Alternatives
+nc -zv 192.168.1.100 80 (netcat)
+curl -I http://192.168.1.100 (curl)
+nmap -p 80 192.168.1.100 (nmap)
+
+## 3. SSH Configuration and Security
+
+### What is SSH?
+SSH stands for Secure Shell. Provides interface to Linux system. Takes commands and translates to kernel to manage hardware.
+
+### Linux System Architecture
+┌─────────────────┐
+│ Utilities │ (pwd, ls, cp, ssh)
+└─────────────────┘
+┌─────────────────┐
+│ Shell │ (bash, csh, ksh)
+└─────────────────┘
+┌─────────────────┐
+│ Kernel │ (Core OS)
+└─────────────────┘
+┌─────────────────┐
+│ Hardware │ (CPU, Memory, Disk)
+└─────────────────┘
+
+
+### OpenSSH Details
+OpenSSH is a package/software. Service daemon is sshd. SSH port number is 22 (default).
+
+### SSH Security Measures
+
+Measure 1: Configure Idle Timeout
+Purpose: Avoid unattended SSH sessions. Real-Life Example: Like auto-lock after inactivity.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Add: ClientAliveInterval 600
+4. Add: ClientAliveCountMax 0
+5. Restart: systemctl restart sshd
+Result: Auto-disconnect after 10 minutes idle.
+
+Measure 2: Disable Root Login
+Purpose: Prevent direct root login. Real-Life Example: Like removing master key from front door.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Change: PermitRootLogin no
+4. Restart: systemctl restart sshd
+Result: Must login as regular user, then use sudo.
+
+Measure 3: Disable Empty Passwords
+Purpose: Prevent login with empty passwords. Real-Life Example: Like requiring ID to enter.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Uncomment: PermitEmptyPasswords no
+4. Restart: systemctl restart sshd
+Result: Users with empty passwords cannot SSH.
+
+Measure 4: Limit Users SSH Access
+Purpose: Only allow specific users. Real-Life Example: Like guest list at party.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Add: AllowUsers user1 user2 admin
+4. Restart: systemctl restart sshd
+Result: Only specified users can SSH.
+
+Measure 5: Change Default Port
+Purpose: Reduce automated attacks. Real-Life Example: Like changing house address.
+Steps:
+1. Become root: sudo su -
+2. Edit /etc/ssh/sshd_config
+3. Change: Port 2222
+4. Restart: systemctl restart sshd
+5. Update firewall: firewall-cmd --permanent --add-port=2222/tcp
+6. Connect: ssh -p 2222 user@server
+Result: SSH runs on port 2222 instead of 22.
+
+## 4. SSH Key-Based Authentication
+
+### Why SSH Keys?
+Two reasons: Repetitive logins (faster than typing password), Automation through scripts (no human intervention needed).
+
+### Keys Generated at User Level
+Each user generates their own keys. Examples: User "iafzal" has own keys, User "root" has own keys. Provides individualized access control.
+
+### How SSH Keys Work
+Private Key: Keep secret on client (never share). Public Key: Share with servers (safe to share). Real-Life Example: Like unique lock and key system.
+
+### SSH Key Setup Diagram
+┌──────────────┐ ┌──────────────┐
+│ Client │ │ Server │
+│ │ │ │
+│ Step 1: │ │ │
+│ ssh-keygen │ │ │
+│ Creates: │ │ │
+│ - id_rsa │ │ │
+│ - id_rsa.pub │ │ │
+│ │ │ │
+│ Step 2: │ │ │
+│ ssh-copy-id │───────────────────►│ │
+│ root@server │ │ │
+│ │ │ │
+│ │ │ Public key │
+│ │ │ added to │
+│ │ │ authorized_ │
+│ │ │ keys │
+│ │ │ │
+│ Step 3: │ │ │
+│ ssh root@ │───────────────────►│ │
+│ server │ │ │
+│ │ │ │
+│ No password │ │ Authenticates│
+│ needed! │ │ with key │
+└──────────────┘ └──────────────┘
+
+
+### Step-by-Step Setup
+
+Step 1: Generate Keys on Client
+Command: ssh-keygen
+Location: ~/.ssh/id_rsa (private), ~/.ssh/id_rsa.pub (public)
+Real-Life Example: Like creating unique lock and key set.
+
+Step 2: Copy Public Key to Server
+Command: ssh-copy-id root@192.168.1.x
+What it does: Copies public key to server's ~/.ssh/authorized_keys
+First time: Will ask for password (only time needed)
+Real-Life Example: Like giving duplicate key to friend.
+
+Step 3: Login Without Password
+Command: ssh root@192.168.1.x
+Alternative: ssh -l root 192.168.1.x
+Result: Logs in automatically without password prompt
+Real-Life Example: Like using key to unlock door automatically.
+
+### Complete Example
+Client: MyFirstLinuxVM
+Server: LinuxCentOS7 at 192.168.1.100
+
+On Client:
+1. ssh-keygen (press Enter for defaults)
+2. ssh-copy-id root@192.168.1.100 (enter password once)
+3. ssh root@192.168.1.100 (no password needed!)
+
+Result: Passwordless SSH access configured.
+
+## 5. Summary
+
+Telnet: Unsecured, use only for network testing. SSH: Secured, use for all remote access. SSH Security: Idle timeout, disable root, disable empty passwords, limit users, change port. SSH Keys: Generate on client, copy to server, login without password. Use Cases: Automation, repetitive tasks, secure access.
+
+All commands and configurations provided above. Diagrams show the flow. Real-life examples help understand concepts.
